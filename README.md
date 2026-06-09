@@ -41,6 +41,40 @@ The Windows build produces:
 - `bin/listener.exe`
 - `bin/client.exe`
 
+## Easy Runners
+
+Windows PowerShell:
+
+```powershell
+.\scripts\run-lab.ps1 -Role build
+.\scripts\run-lab.ps1 -Role local
+```
+
+The `local` role opens broker, listener, and client in separate PowerShell windows with safe C2-shaped defaults. To run a single role:
+
+```powershell
+.\scripts\run-lab.ps1 -Role broker -Listen :8080
+.\scripts\run-lab.ps1 -Role listener -BrokerUrl http://127.0.0.1:8080 -Session lab-demo
+.\scripts\run-lab.ps1 -Role client -BrokerUrl http://127.0.0.1:8080 -Session lab-demo -Count 8
+```
+
+Linux Python:
+
+```bash
+python3 scripts/run_lab.py build
+python3 scripts/run_lab.py local
+```
+
+The Linux runner keeps all local demo processes attached to the same terminal and stops broker/listener when the counted client run finishes. To run a single role:
+
+```bash
+python3 scripts/run_lab.py broker --listen :8080
+python3 scripts/run_lab.py listener --broker-url http://127.0.0.1:8080 --session lab-demo
+python3 scripts/run_lab.py client --broker-url http://127.0.0.1:8080 --session lab-demo --count 8
+```
+
+Both runners expose the same lab knobs: session id, STUN disablement, beacon interval, jitter, task cadence, synthetic upload size, chunk size, and task delay. Use `-NoStun` in PowerShell or `--no-stun` in Python for a local-only run.
+
 ## Local Run
 
 Use three terminals from the repository root.
