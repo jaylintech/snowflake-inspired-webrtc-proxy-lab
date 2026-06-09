@@ -155,7 +155,10 @@ def run_build(_: argparse.Namespace) -> int:
     bin_dir.mkdir(exist_ok=True)
 
     if not command_available("go"):
-        raise SystemExit("Go 1.22+ is required for the Linux build path.")
+        raise SystemExit(
+            "Go 1.22+ is required. Install it from https://go.dev/dl/, "
+            "restart your shell, then rerun this command."
+        )
 
     commands = [
         ["go", "mod", "tidy"],
@@ -171,7 +174,10 @@ def run_build(_: argparse.Namespace) -> int:
 
 def run_test(_: argparse.Namespace) -> int:
     if not command_available("go"):
-        raise SystemExit("Go 1.22+ is required to run tests on Linux.")
+        raise SystemExit(
+            "Go 1.22+ is required. Install it from https://go.dev/dl/, "
+            "restart your shell, then rerun this command."
+        )
 
     return run_foreground(["go", "test", "./..."])
 

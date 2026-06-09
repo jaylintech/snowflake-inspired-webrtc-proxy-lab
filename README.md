@@ -15,33 +15,59 @@ The broker intentionally uses ordinary, visible HTTP signaling. It does not impl
 ## Prerequisites
 
 - Go 1.22 or newer.
-- Network egress that allows the configured STUN server if you use the default `stun:stun.l.google.com:19302`.
+- Network egress that allows UDP between the client and listener. If both peers are behind NAT, the default public STUN server helps them discover reachable candidates.
 - Two hosts or two terminals on one host for a local-only first run.
 
 The project uses Pion WebRTC v3.3.6, the current tagged v3 package shown by Go package documentation as of June 2026.
 
 ## Build
 
-If Go is installed locally:
+Install Go 1.22 or newer, then build from the repository root.
+
+Windows:
 
 ```powershell
+.\scripts\run-lab.ps1 -Role build
+```
+
+Linux:
+
+```bash
+python3 scripts/run_lab.py build
+```
+
+Manual build:
+
+```bash
 go mod tidy
 go test ./...
 go build -o bin ./cmd/...
 ```
 
-If Go is not installed, build with Docker from the repository root:
-
-```powershell
-docker run --rm -v "${PWD}:/src" -w /src golang:1.22 go test ./...
-docker run --rm -e GOOS=windows -e GOARCH=amd64 -e CGO_ENABLED=0 -v "${PWD}:/src" -w /src golang:1.22 go build -o bin ./cmd/...
-```
-
-The Windows build produces:
+On Windows, the build produces:
 
 - `bin/broker.exe`
 - `bin/listener.exe`
 - `bin/client.exe`
+
+On Linux, the build produces:
+
+- `bin/broker`
+- `bin/listener`
+- `bin/client`
+
+## STUN And Network Reality
+
+You do not always need an external STUN server.
+
+- Same host: no external STUN is needed. Use `-NoStun` or `--no-stun`.
+- Same LAN with direct UDP allowed: external STUN is often not needed.
+- NAT to NAT across networks: STUN is usually needed so each peer can discover its public-facing candidate.
+- Strict enterprise networks: public STUN may be blocked, and UDP peer traffic may also be blocked.
+
+That last case is important for the theory. If an enterprise blocks UDP or known public STUN services, this PoC may complete HTTP signaling but fail during ICE/WebRTC connection. That failure is still useful evidence: it shows the control worked at the NAT traversal or UDP policy layer.
+
+For production WebRTC systems, TURN is the usual fallback when direct UDP fails. TURN relays traffic through an allowed relay and can run over TCP/TLS 443, but it changes the network story because traffic goes through the relay instead of directly between peers. This PoC does not bundle TURN so the direct WebRTC behavior remains easy to observe.
 
 ## Easy Runners
 

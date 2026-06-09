@@ -18,6 +18,24 @@ The connection has three observable phases:
 2. The listener reads the offer, posts an SDP answer, and ICE/STUN negotiation starts.
 3. The client and listener open a WebRTC DataChannel and exchange `LAB_HELLO`, `LAB_BEACON`, `LAB_ACK`, `LAB_TASK`, `LAB_RESULT`, and optional `LAB_CHUNK` messages.
 
+## Do You Need External STUN?
+
+Not always. STUN only helps peers discover public-facing network candidates for NAT traversal. It is not the C2 channel, and it does not carry the lab messages.
+
+Use this decision table:
+
+| Scenario | External STUN needed? | Notes |
+| --- | --- | --- |
+| Broker, listener, and client on the same host | No | Use `-NoStun` or `--no-stun`. |
+| Client and listener on the same LAN with direct UDP allowed | Usually no | Host candidates are often enough. |
+| Client and listener on different NATed networks | Usually yes | STUN helps both peers discover public candidates. |
+| Client in a strict enterprise network | Maybe blocked | Public STUN and peer UDP may be denied by policy. |
+| Direct UDP blocked but HTTP signaling works | STUN will not fix it | You would need UDP allowed or a TURN relay. |
+
+If public STUN is blocked, the broker can still show `stored offer` and `stored answer`, but the client may never reach `ICE connection state: connected`. That is a useful result for a defensive test because it proves the environment blocked the WebRTC tunnel after signaling.
+
+TURN is the normal WebRTC fallback when direct peer-to-peer connectivity fails. A TURN relay can run over UDP, TCP, or TLS 443, but it changes the telemetry because traffic is relayed through the TURN server. This PoC does not bundle TURN; it is designed to keep direct WebRTC behavior visible.
+
 ## Option 1: One Windows Machine
 
 Use this to prove the application flow works before moving to separate machines.

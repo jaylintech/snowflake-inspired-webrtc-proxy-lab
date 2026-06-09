@@ -153,20 +153,14 @@ function Invoke-Build {
     $repoRoot = Get-RepoRoot
     Push-Location $repoRoot
     try {
-        if (Test-CommandAvailable "go") {
-            go mod tidy
-            go test ./...
-            go build -o bin ./cmd/...
-            return
+        if (-not (Test-CommandAvailable "go")) {
+            throw "Go 1.22+ is required. Install it from https://go.dev/dl/, restart PowerShell, then rerun this command."
         }
 
-        if (Test-CommandAvailable "docker") {
-            docker run --rm -v "${repoRoot}:/src" -w /src golang:1.22 go test ./...
-            docker run --rm -e GOOS=windows -e GOARCH=amd64 -e CGO_ENABLED=0 -v "${repoRoot}:/src" -w /src golang:1.22 go build -o bin ./cmd/...
-            return
-        }
-
-        throw "Install Go 1.22+ or Docker Desktop, then rerun this build command."
+        New-Item -ItemType Directory -Force -Path "bin" | Out-Null
+        go mod tidy
+        go test ./...
+        go build -o bin ./cmd/...
     }
     finally {
         Pop-Location
@@ -177,17 +171,11 @@ function Invoke-Test {
     $repoRoot = Get-RepoRoot
     Push-Location $repoRoot
     try {
-        if (Test-CommandAvailable "go") {
-            go test ./...
-            return
+        if (-not (Test-CommandAvailable "go")) {
+            throw "Go 1.22+ is required. Install it from https://go.dev/dl/, restart PowerShell, then rerun this command."
         }
 
-        if (Test-CommandAvailable "docker") {
-            docker run --rm -v "${repoRoot}:/src" -w /src golang:1.22 go test ./...
-            return
-        }
-
-        throw "Install Go 1.22+ or Docker Desktop to run tests."
+        go test ./...
     }
     finally {
         Pop-Location
