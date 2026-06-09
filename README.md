@@ -2,6 +2,8 @@
 
 This repository contains a benign WebRTC DataChannel lab for observing signaling, ICE/STUN negotiation, and encrypted peer-to-peer heartbeat traffic in a monitored network. It is intended for defensive testing and lab documentation only.
 
+For a step-by-step local and split-machine walkthrough, see [GUIDE.md](GUIDE.md).
+
 The harness has three pieces:
 
 - `cmd/broker`: an explicit HTTP signaling broker that stores SDP offers and answers for a named lab session.
