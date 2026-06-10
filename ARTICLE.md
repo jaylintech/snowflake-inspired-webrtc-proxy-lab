@@ -1,90 +1,111 @@
-# WebRTC Data Channels as a Defensive C2 Emulation Lab
+# Testing WebRTC Relay Traffic Against Content Filtering
 
-WebRTC is usually discussed in the context of browsers, voice, video, and collaboration tools. The same peer-to-peer transport pattern also makes it useful for defensive research because it produces a network shape that many organizations already allow: HTTPS signaling, ICE/STUN negotiation, and encrypted UDP peer traffic.
+WebRTC is usually discussed in the context of browsers, voice, video, and collaboration tools. The same peer-to-peer transport pattern can also be used as a relay layer: a client establishes a WebRTC DataChannel to an intermediate peer, and that peer reaches a final website or server on the client's behalf.
 
-This article describes a benign proof of concept that emulates that network behavior without implementing malware capabilities. The goal is to help defenders collect telemetry, validate detections, and reason about WebRTC-based tunneling patterns in a controlled lab.
+This article describes a bounded, defensive proof of concept that tests that network pattern. The goal is to evaluate what content filters, firewalls, and monitoring tools see when a client reaches an owned destination server through a Snowflake-inspired WebRTC relay instead of connecting to the destination directly.
 
 ## Research Question
 
-Can a monitored network reliably identify long-duration, low-bandwidth WebRTC DataChannel sessions that behave like command-and-control traffic, even when the traffic uses legitimate WebRTC primitives?
+Can a monitored network identify or block access to a controlled destination when the test client sends the request through a WebRTC relay?
 
-The PoC is intentionally scoped to answer that question. It models the timing and message shapes of C2-like traffic while avoiding real endpoint actions such as command execution, persistence, credential access, process hiding, filesystem collection, or security control bypass.
+The PoC is intentionally scoped to answer that question. It does not implement command execution, persistence, credential access, process hiding, filesystem collection, or an unrestricted proxy. The relay is configured with one allowed target URL, and the client can request only relative paths under that target.
 
 ## Lab Architecture
 
-The lab has three components:
+The relay path has four components:
 
 - `broker`: an explicit HTTP signaling broker that exchanges SDP offers and answers.
-- `listener`: an external peer that accepts the WebRTC DataChannel and returns simulated tasking.
-- `client`: an internal peer that creates the DataChannel, sends beacons, and reports simulated task results.
+- `relay`: a WebRTC peer that receives bounded DataChannel requests and forwards them to a configured target URL.
+- `webclient`: a test client that sends synthetic HTTP requests through the DataChannel.
+- `target`: a controlled HTTP server that logs proof of relayed requests.
 
 The connection flow has three phases:
 
-1. Signaling over HTTP: the client posts an SDP offer and the listener posts an SDP answer.
-2. ICE/STUN negotiation: the peers discover viable UDP paths.
-3. DataChannel exchange: the peers send encrypted WebRTC messages that mimic beaconing and tasking.
+1. Signaling: the webclient posts an SDP offer to the broker, and the relay posts an SDP answer.
+2. ICE/STUN negotiation: the webclient and relay discover whether a WebRTC path can be established.
+3. Relay exchange: the webclient sends `LAB_RELAY_REQUEST` messages through the encrypted DataChannel, and the relay forwards them to the controlled target.
 
-## Emulated Behaviors
+## Why This Differs From Direct C2 Emulation
 
-The PoC includes several safe behaviors that create malware-like telemetry without becoming malware:
+A direct WebRTC C2 emulator looks like this:
 
-- `LAB_HELLO`: a fake initial host check-in with synthetic identity fields.
-- `LAB_BEACON`: recurring beacons with configurable interval and jitter.
-- `LAB_ACK`: listener acknowledgement messages.
-- `LAB_TASK`: simulated operator tasking from the listener.
-- `LAB_RESULT`: simulated client task results.
-- `LAB_CHUNK`: synthetic chunk upload traffic generated from repeated bytes, not local files.
-
-These messages help analysts observe cadence, session duration, packet sizing, burst behavior, and peer-to-peer flow metadata.
-
-## Why This Matters
-
-Traditional network controls often focus on known domains, destination IPs, ports, or signatures. WebRTC complicates that model because the observable pieces are split across multiple phases. The signaling path may look like ordinary web traffic, while the final peer-to-peer channel may look like collaboration or media infrastructure.
-
-This does not mean WebRTC traffic is invisible. It means defenders need behavioral analytics:
-
-- long-running UDP sessions with low but regular throughput,
-- recurring heartbeat cadence,
-- unusual DataChannel use without corresponding audio or video behavior,
-- repeated STUN negotiation patterns,
-- client systems establishing peer-like sessions outside expected application contexts.
-
-## Running the PoC
-
-Start the broker:
-
-```powershell
-.\bin\broker.exe -listen :8080
+```text
+client == WebRTC DataChannel ==> listener
 ```
 
-Start the listener:
+That is useful for studying WebRTC beacon cadence and peer UDP visibility, but the client still connects directly to the listener IP.
 
-```powershell
-.\bin\listener.exe -broker http://127.0.0.1:8080 -session lab-2 -task-every 2 -task-sequence sleep,inventory,synthetic-upload -synthetic-bytes 8192 -chunk-bytes 1024
+The relay model looks like this:
+
+```text
+client == WebRTC DataChannel ==> relay --> controlled target
 ```
 
-Start the client:
+The client-side network sees signaling and WebRTC traffic to the relay. The controlled target sees traffic from the relay. That distinction is the Snowflake-inspired part: indirection, not invisibility.
+
+## Expected Observations
+
+On the monitored client network, defenders should look for:
+
+- HTTP signaling to the broker.
+- STUN traffic if STUN is enabled.
+- WebRTC/UDP traffic to the relay.
+- No direct client connection to the controlled target when the target is reachable only from the relay side.
+
+On the controlled target, defenders should see:
+
+- Requests from the relay host.
+- `X-WebRTC-Relay-Lab: true`.
+- `X-Relay-Request-ID`, which maps target hits back to webclient logs.
+
+On the relay, logs should show:
+
+- DataChannel establishment.
+- Bounded target requests.
+- The configured target URL.
+
+## STUN And Enterprise Networks
+
+External STUN is not always required. Same-host and same-LAN tests often work without it. Across NATed networks, STUN is often needed so peers can discover public-facing candidates.
+
+Enterprise networks may block public STUN and arbitrary peer UDP. In that case, signaling can succeed while WebRTC fails to connect. That is still a valid result: it means the network allowed rendezvous but blocked the relay channel at NAT traversal or UDP policy.
+
+TURN is the normal WebRTC fallback for strict networks, but this PoC does not bundle TURN. Direct relay behavior is easier to observe and explain without introducing a relay-of-a-relay.
+
+## Running The Relay Test
+
+Build:
 
 ```powershell
-.\bin\client.exe -broker http://127.0.0.1:8080 -session lab-2 -interval 8s -jitter 35 -count 8 -task-delay 1s -chunk-delay 250ms
+.\scripts\run-lab.ps1 -Role build
 ```
 
-For a local-only test without public STUN, pass `-stun ""` to both peers.
+Run a local Windows test:
+
+```powershell
+.\scripts\run-lab.ps1 -Role relay-local -Session relay-local -NoStun
+```
+
+Run a local Linux test:
+
+```bash
+python3 scripts/run_lab.py build
+python3 scripts/run_lab.py relay-local --session relay-local --no-stun
+```
+
+For split testing, run broker, target, and relay on the server side, then run `webclient` from the monitored client network.
 
 ## Detection Ideas
 
-Useful telemetry sources include firewall flow records, DNS logs, proxy logs, endpoint network telemetry, packet captures, and STUN/UDP metadata. A practical detection experiment should compare this PoC against normal WebRTC-heavy applications such as conferencing tools.
-
 Signals worth measuring:
 
-- beacon interval distribution,
-- UDP flow duration,
-- bytes sent per direction,
-- burst size and timing after task messages,
-- frequency of STUN binding checks,
-- whether a process has a normal user-facing WebRTC reason to exist.
+- Whether the client resolves or connects to the final target directly.
+- Whether the final target sees the client IP or the relay IP.
+- WebRTC DataChannel session duration.
+- UDP flow timing and byte distribution.
+- STUN reachability.
+- Differences between allowed collaboration WebRTC and this standalone client process.
 
 ## Safety Boundary
 
-This project is a defensive emulator. It deliberately avoids harmful capabilities and uses synthetic data. The point is to make the network theory testable without creating an operational implant.
-
+This project is a defensive network-behavior emulator. It uses synthetic requests against controlled targets. The relay is deliberately bounded so it cannot be used as a general-purpose proxy to arbitrary third-party destinations.

@@ -1,335 +1,300 @@
-# Local Verification Guide
+# WebRTC Relay Verification Guide
 
-This guide shows how to run the lab in a controlled environment and verify that the test client connects to the command-and-control listener emulator.
+This guide explains how to run the Snowflake-inspired relay lab and verify whether a monitored test client can reach an owned destination through a WebRTC relay.
 
-In this document, "victim" means a test VM or lab workstation that you own and are authorized to monitor. The client is a simulator: it does not execute commands, collect files, install persistence, hide itself, steal credentials, or bypass security tools. It only produces C2-shaped WebRTC telemetry for defensive research.
+In this document, "victim" means a test VM or lab workstation that you own and are authorized to monitor. The client is a simulator. The relay is bounded to a configured target URL and is not an open proxy.
 
-## What You Are Running
+## What This Tests
 
-The lab has three roles:
+The relay experiment answers this question:
 
-- `broker`: HTTP signaling service used to exchange WebRTC SDP offers and answers.
-- `listener`: command-and-control listener emulator that receives lab beacons and sends simulated tasks.
-- `client`: victim/test-client simulator that opens a WebRTC DataChannel and sends synthetic beacons/results.
+> Can a test client reach a controlled website/server through WebRTC relay traffic instead of connecting to that destination directly, and what do content/security controls observe?
 
-The connection has three observable phases:
+Expected path:
 
-1. The client posts an SDP offer to the broker.
-2. The listener reads the offer, posts an SDP answer, and ICE/STUN negotiation starts.
-3. The client and listener open a WebRTC DataChannel and exchange `LAB_HELLO`, `LAB_BEACON`, `LAB_ACK`, `LAB_TASK`, `LAB_RESULT`, and optional `LAB_CHUNK` messages.
+```text
+[Victim/Test Client] -- HTTP signaling --> [Broker]
+[Victim/Test Client] == WebRTC DataChannel ==> [Relay]
+[Relay] -- HTTP/HTTPS --> [Controlled Target]
+```
+
+The client-side firewall can still see broker traffic and WebRTC/UDP to the relay. It should not see a direct client connection to the controlled target if the test is working.
+
+## Roles
+
+- `broker`: HTTP signaling broker for SDP offer/answer exchange.
+- `relay`: WebRTC peer that receives bounded relay requests and forwards them to one configured target URL.
+- `webclient`: test client that sends synthetic HTTP requests over the DataChannel.
+- `target`: controlled HTTP server that logs relayed requests.
+
+The older `listener` and `client` roles are still present for direct C2-like beacon testing, but they are not the main relay experiment.
 
 ## Do You Need External STUN?
 
-Not always. STUN only helps peers discover public-facing network candidates for NAT traversal. It is not the C2 channel, and it does not carry the lab messages.
-
-Use this decision table:
+Not always. STUN helps WebRTC peers discover public-facing candidates for NAT traversal. It does not carry the relayed HTTP request.
 
 | Scenario | External STUN needed? | Notes |
 | --- | --- | --- |
-| Broker, listener, and client on the same host | No | Use `-NoStun` or `--no-stun`. |
-| Client and listener on the same LAN with direct UDP allowed | Usually no | Host candidates are often enough. |
-| Client and listener on different NATed networks | Usually yes | STUN helps both peers discover public candidates. |
-| Client in a strict enterprise network | Maybe blocked | Public STUN and peer UDP may be denied by policy. |
-| Direct UDP blocked but HTTP signaling works | STUN will not fix it | You would need UDP allowed or a TURN relay. |
+| Broker, relay, webclient, and target on the same host | No | Use `-NoStun` or `--no-stun`. |
+| Webclient and relay on the same LAN with direct UDP allowed | Usually no | Host candidates are often enough. |
+| Webclient and relay on different NATed networks | Usually yes | STUN helps peers discover public candidates. |
+| Strict enterprise network | Maybe blocked | Public STUN and arbitrary peer UDP may be denied. |
+| HTTP signaling works but UDP is blocked | STUN will not fix it | You need UDP allowed or a TURN relay. |
 
-If public STUN is blocked, the broker can still show `stored offer` and `stored answer`, but the client may never reach `ICE connection state: connected`. That is a useful result for a defensive test because it proves the environment blocked the WebRTC tunnel after signaling.
+If signaling succeeds but ICE never connects, record that as a defensive result. It means rendezvous was allowed but WebRTC tunnel establishment was blocked.
 
-TURN is the normal WebRTC fallback when direct peer-to-peer connectivity fails. A TURN relay can run over UDP, TCP, or TLS 443, but it changes the telemetry because traffic is relayed through the TURN server. This PoC does not bundle TURN; it is designed to keep direct WebRTC behavior visible.
-
-## Option 1: One Windows Machine
-
-Use this to prove the application flow works before moving to separate machines.
+## Local Windows Verification
 
 From the repository root:
 
 ```powershell
 .\scripts\run-lab.ps1 -Role build
-.\scripts\run-lab.ps1 -Role local -Session lab-local
+.\scripts\run-lab.ps1 -Role relay-local -Session relay-local -NoStun
 ```
 
-The `local` role opens three PowerShell windows:
+This opens four PowerShell windows:
 
 - broker
-- listener
-- client
+- target
+- relay
+- webclient
 
-Expected proof that it works:
+Success indicators:
 
-- Broker window shows `stored offer for session "lab-local"`.
-- Broker window shows `stored answer for session "lab-local"`.
-- Listener window shows `data channel "lab-beacon" created by client`.
-- Listener window shows `received lab beacon`.
-- Client window shows `data channel "lab-beacon" open`.
-- Client window shows `listener response: LAB_ACK`.
+- Broker logs `stored offer for session "relay-local"`.
+- Broker logs `stored answer for session "relay-local"`.
+- Relay logs `relay data channel "lab-relay" open`.
+- Relay logs `relay request id=relay-001`.
+- Target logs `target hit`.
+- Webclient logs `relay response id=relay-001 status=200`.
 
-The local run is useful for functional verification, but it mostly uses loopback traffic. Use the split-machine setup below when you want network telemetry that looks like a client connecting to an external listener.
-
-## Option 2: One Linux Machine
+## Local Linux Verification
 
 From the repository root:
 
 ```bash
 python3 scripts/run_lab.py build
-python3 scripts/run_lab.py local --session lab-local
+python3 scripts/run_lab.py relay-local --session relay-local --no-stun
 ```
 
-The Python runner starts broker, listener, and client in the same terminal. Because the default client sends a counted run, the runner stops the background broker and listener after the client finishes.
+The Linux runner starts all relay components in the same terminal and stops broker, relay, and target after the webclient exits.
 
-Expected proof that it works:
+Success indicators are the same as the Windows local test.
 
-- The broker logs show `stored offer` and `stored answer`.
-- The listener logs show `received lab beacon`.
-- The client logs show `ICE connection state: connected` or `peer connection state: connected`.
-- The client logs show `listener response: LAB_ACK`.
+## Split Lab Verification
 
-## Option 3: Split Lab with C2 Server and Victim Simulator
+Use this setup to test from a monitored client network.
 
-This is the setup to use for a technical article or monitoring experiment.
-
-Example topology:
+Example:
 
 ```text
-[Victim/Test Client] ---> HTTP signaling ---> [C2 Server: broker]
-[Victim/Test Client] <== WebRTC DataChannel ==> [C2 Server: listener]
+[Monitored Test Client] --> broker on SERVER_IP:8080
+[Monitored Test Client] == WebRTC/UDP ==> relay on SERVER_IP
+[Relay] --> target on 127.0.0.1:9090 or another owned target
 ```
 
-Use two machines:
+Replace `SERVER_IP` with the server's reachable IP address.
 
-- C2 server emulator: runs `broker` and `listener`.
-- Victim/test-client simulator: runs `client`.
+### Step 1: Start Broker
 
-Replace `C2_SERVER_IP` with the server's reachable IP address.
-
-### Step 1: Start the C2 Broker
-
-On the C2 server:
-
-Windows:
-
-```powershell
-.\scripts\run-lab.ps1 -Role broker -Listen :8080
-```
-
-Linux:
+On the server:
 
 ```bash
 python3 scripts/run_lab.py broker --listen :8080
 ```
 
-Verify that the broker is reachable.
-
-From Windows victim/test client:
-
-```powershell
-Invoke-WebRequest -Uri http://C2_SERVER_IP:8080/healthz -UseBasicParsing
-```
-
-The expected HTTP status is `204 No Content`.
-
-From Linux victim/test client:
+Verify from the monitored client:
 
 ```bash
-curl -i http://C2_SERVER_IP:8080/healthz
+curl -i http://SERVER_IP:8080/healthz
 ```
 
-The expected HTTP status is `204 No Content`.
-
-If this fails, fix basic routing, host firewall, or cloud security group rules before continuing. The client cannot signal WebRTC until it can reach the broker.
-
-### Step 2: Start the C2 Listener
-
-On the C2 server, in a second terminal:
-
-Windows:
-
-```powershell
-.\scripts\run-lab.ps1 -Role listener -BrokerUrl http://127.0.0.1:8080 -Session lab-split -TaskEvery 2 -SyntheticBytes 8192
-```
-
-Linux:
-
-```bash
-python3 scripts/run_lab.py listener --broker-url http://127.0.0.1:8080 --session lab-split --task-every 2 --synthetic-bytes 8192
-```
-
-Expected listener log:
+Expected status:
 
 ```text
-waiting for SDP offer at http://127.0.0.1:8080 session "lab-split"
+HTTP/1.1 204 No Content
 ```
 
-### Step 3: Start the Victim/Test Client Simulator
-
-On the victim/test-client machine:
-
-Windows:
+Windows check:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role client -BrokerUrl http://C2_SERVER_IP:8080 -Session lab-split -Interval 8s -Jitter 35 -Count 8 -TaskDelay 1s -ChunkDelay 250ms
+Invoke-WebRequest -Uri http://SERVER_IP:8080/healthz -UseBasicParsing
 ```
 
-Linux:
+### Step 2: Start Controlled Target
+
+On the server:
 
 ```bash
-python3 scripts/run_lab.py client --broker-url http://C2_SERVER_IP:8080 --session lab-split --interval 8s --jitter 35 --count 8 --task-delay 1s --chunk-delay 250ms
+python3 scripts/run_lab.py target --target-listen :9090
 ```
 
-Expected client logs:
+Verify locally on the server:
+
+```bash
+curl -i http://127.0.0.1:9090/healthz
+```
+
+### Step 3: Start Relay
+
+On the server:
+
+```bash
+python3 scripts/run_lab.py relay --broker-url http://127.0.0.1:8080 --session relay-split --target-url http://127.0.0.1:9090
+```
+
+Expected relay log:
 
 ```text
-offer posted to http://C2_SERVER_IP:8080 session "lab-split"; waiting for answer
+relay waiting for SDP offer at http://127.0.0.1:8080 session "relay-split"
+```
+
+### Step 4: Start WebRTC Client
+
+On the monitored test client:
+
+```bash
+python3 scripts/run_lab.py webclient --broker-url http://SERVER_IP:8080 --session relay-split --paths "/,/healthz,/article-proof?via=webrtc"
+```
+
+Windows equivalent:
+
+```powershell
+.\scripts\run-lab.ps1 -Role webclient -BrokerUrl http://SERVER_IP:8080 -Session relay-split -Paths "/,/healthz,/article-proof?via=webrtc"
+```
+
+Expected webclient logs:
+
+```text
+offer posted to http://SERVER_IP:8080 session "relay-split"; waiting for relay answer
 ICE connection state: connected
 peer connection state: connected
-data channel "lab-beacon" open
-sent lab beacon #1
-listener response: LAB_ACK
-listener response: LAB_TASK
+relay data channel "lab-relay" open
+sent relay request id=relay-001 method=GET path=/
+relay response id=relay-001 status=200
 ```
 
-Expected C2 listener logs:
+Expected relay logs:
 
 ```text
-data channel "lab-beacon" created by client
-data channel "lab-beacon" open
-received lab beacon #1
-sending simulated task: LAB_TASK
-received lab message: LAB_RESULT
-received lab message: LAB_CHUNK
+relay data channel "lab-relay" created by client
+relay data channel "lab-relay" open
+relay request id=relay-001 method=GET target=http://127.0.0.1:9090/
 ```
 
-Expected broker logs:
+Expected target logs:
 
 ```text
-stored offer for session "lab-split"
-stored answer for session "lab-split"
+target hit: method=GET path=/ request_id=relay-001
+target hit: method=GET path=/article-proof?via=webrtc request_id=relay-003
 ```
 
-If you see those messages on both sides, the PoC is working.
+If those logs appear, the relay path is working.
 
-## Verification Checklist
+## What To Observe
 
-Use this checklist when validating the run for screenshots or article evidence.
+On the monitored client network:
 
-- Broker is reachable from the test client: `/healthz` returns HTTP `204`.
-- Broker records the SDP offer.
-- Broker records the SDP answer.
-- Listener reports a DataChannel created by the client.
-- Client reports `ICE connection state: connected` or `peer connection state: connected`.
-- Client reports `data channel "lab-beacon" open`.
-- Listener receives at least one `LAB_BEACON`.
-- Client receives at least one `LAB_ACK`.
-- Listener sends at least one `LAB_TASK` when `TaskEvery` is greater than zero.
-- Listener receives `LAB_RESULT`.
-- Listener receives `LAB_CHUNK` when `synthetic-upload` is in the task sequence.
+- HTTP signaling to `SERVER_IP:8080`.
+- WebRTC/UDP traffic to the relay.
+- STUN traffic if STUN is enabled.
+- No direct client connection to the controlled target if the target is only reachable from the relay side.
+
+On the target server:
+
+- Requests should come from the relay host.
+- The `X-WebRTC-Relay-Lab: true` header marks relayed lab requests.
+- The `X-Relay-Request-ID` header maps target hits back to webclient logs.
+
+On the broker:
+
+- `stored offer`
+- `stored answer`
+
+On the relay:
+
+- `ICE connection state: connected`
+- `relay data channel "lab-relay" open`
+- `relay request id=... target=...`
 
 ## Network Checks
 
-The application logs are the best functional proof. Network tools help prove what the environment observed.
-
-### Windows
-
-Confirm the broker port is listening on the C2 server:
+Windows client:
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8080 -State Listen
-```
-
-Check the client can reach the broker:
-
-```powershell
-Test-NetConnection C2_SERVER_IP -Port 8080
-```
-
-During a run, view active TCP and UDP entries:
-
-```powershell
+Test-NetConnection SERVER_IP -Port 8080
 netstat -ano | findstr ":8080"
 netstat -ano -p udp
 ```
 
-For packet capture, use Wireshark on the client or server and start with these display filters:
-
-```text
-http
-stun
-udp
-ip.addr == C2_SERVER_IP
-```
-
-### Linux
-
-Confirm the broker port is listening on the C2 server:
+Linux client:
 
 ```bash
-ss -ltnp | grep ':8080'
+curl -i http://SERVER_IP:8080/healthz
+ss -tunap | grep -E ':8080|webclient|relay'
 ```
 
-Check the client can reach the broker:
-
-```bash
-curl -i http://C2_SERVER_IP:8080/healthz
-```
-
-During a run, view active TCP and UDP entries:
-
-```bash
-ss -tunap | grep -E ':8080|client|listener|broker'
-```
-
-For packet capture:
+Packet capture examples:
 
 ```bash
 sudo tcpdump -ni any 'tcp port 8080 or udp'
 ```
 
-You should see HTTP signaling on TCP `8080` and UDP traffic for WebRTC ICE/DataChannel activity. The DataChannel payload is encrypted on the wire, so verify message contents in the application logs rather than packet payloads.
+Wireshark display filters:
 
-## Local-Only Mode Without Public STUN
+```text
+http
+stun
+udp
+ip.addr == SERVER_IP
+```
 
-For an isolated local test, disable public STUN on both peers.
+The DataChannel payload is encrypted on the wire, so use application logs for message contents.
+
+## Failure Modes
+
+Broker receives no offer:
+
+- The client cannot reach `http://SERVER_IP:8080`.
+- The broker is not running.
+- Host firewall or cloud security group blocks TCP `8080`.
+
+Broker stores offer and answer, but WebRTC never connects:
+
+- UDP between client and relay is blocked.
+- Public STUN is blocked or unreachable.
+- Both peers are behind NATs that need TURN.
+
+WebRTC connects, but target receives no request:
+
+- Relay `-target-url` is wrong.
+- Target is not reachable from the relay host.
+- Client paths are invalid.
+
+Target receives requests directly from the client:
+
+- The test is not isolated correctly.
+- You are also browsing or curling the target directly from the client.
+- Use a target only reachable from the relay side if you need stronger proof.
+
+## Direct Beacon Comparison
+
+For direct C2-shaped telemetry, use:
 
 Windows:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role listener -BrokerUrl http://127.0.0.1:8080 -Session no-stun -NoStun
-.\scripts\run-lab.ps1 -Role client -BrokerUrl http://127.0.0.1:8080 -Session no-stun -NoStun -Count 3
+.\scripts\run-lab.ps1 -Role local
 ```
 
 Linux:
 
 ```bash
-python3 scripts/run_lab.py listener --broker-url http://127.0.0.1:8080 --session no-stun --no-stun
-python3 scripts/run_lab.py client --broker-url http://127.0.0.1:8080 --session no-stun --no-stun --count 3
+python3 scripts/run_lab.py local
 ```
 
-Use normal STUN for split-machine testing unless both peers can discover a direct local candidate without it.
-
-## Troubleshooting
-
-If the client never reaches `waiting for answer`, check:
-
-- The broker URL is reachable from the client.
-- The listener and client use the same `Session` value.
-- The broker is running before the client starts.
-
-If the answer is stored but ICE never connects, check:
-
-- Host firewalls allow UDP between the client and listener.
-- The configured STUN server is reachable, or use `NoStun` only for a local-only test.
-- Both peers are on networks that allow WebRTC-style UDP traffic.
-
-If you see `LAB_ACK` but no `LAB_TASK`, check:
-
-- `TaskEvery` is greater than zero on the listener.
-- The client sends enough beacons to reach the task cadence.
-- The listener `TaskSequence` is not empty.
-
-If you see `LAB_TASK` but no `LAB_CHUNK`, check:
-
-- `synthetic-upload` is included in the listener task sequence.
-- `SyntheticBytes` is greater than zero.
-- The client did not exit before the task result finished.
+That mode connects the client directly to a listener over WebRTC and emits beacon/task messages. It does not test Snowflake-style relay indirection.
 
 ## Safety Notes
 
-Keep this lab in systems you own or have explicit permission to test. The PoC is intentionally designed as a network-behavior emulator, not an implant. Use the logs and traffic shape to validate detection ideas, not to operate against third-party systems.
+Run this only in environments you own or have explicit permission to test. Keep the relay target bounded to systems you control. Do not modify the relay into an unrestricted proxy for third-party destinations.

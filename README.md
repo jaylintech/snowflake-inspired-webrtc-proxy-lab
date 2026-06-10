@@ -1,24 +1,50 @@
-# Snowflake Protocol WebRTC Lab
+# Snowflake-Inspired WebRTC Relay Lab
 
-This repository contains a benign WebRTC DataChannel lab for observing signaling, ICE/STUN negotiation, and encrypted peer-to-peer heartbeat traffic in a monitored network. It is intended for defensive testing and lab documentation only.
+This repository contains a controlled WebRTC relay proof of concept for defensive testing. It evaluates whether a test client can reach an owned destination server through a WebRTC DataChannel relay instead of connecting to that destination directly.
 
 For a step-by-step local and split-machine walkthrough, see [GUIDE.md](GUIDE.md).
 
-The harness has three pieces:
+## Architecture
 
-- `cmd/broker`: an explicit HTTP signaling broker that stores SDP offers and answers for a named lab session.
-- `cmd/listener`: the external listener emulator. It waits for an offer, answers it, receives heartbeats, and replies with acknowledgements.
-- `cmd/client`: the internal client emulator. It creates a WebRTC DataChannel and sends periodic benign heartbeat strings.
+Primary relay mode:
 
-The broker intentionally uses ordinary, visible HTTP signaling. It does not implement domain fronting, SNI manipulation, covert routing, payload execution, persistence, or command execution.
+```text
+[Test Client] -- HTTP signaling --> [Broker]
+[Test Client] == WebRTC DataChannel ==> [Relay]
+[Relay] -- HTTP/HTTPS --> [Controlled Target Server]
+```
+
+Roles:
+
+- `cmd/broker`: HTTP signaling service that exchanges SDP offers and answers.
+- `cmd/relay`: WebRTC relay that accepts DataChannel requests and forwards them only to one configured target URL.
+- `cmd/webclient`: test client that sends synthetic HTTP requests through the WebRTC relay.
+- `cmd/target`: controlled HTTP target server that logs proof of relayed access.
+
+The repository also keeps the earlier direct C2-shaped beacon emulator:
+
+- `cmd/listener`: direct WebRTC listener emulator.
+- `cmd/client`: direct WebRTC beacon/tasking client emulator.
+
+## Safety Boundary
+
+The relay is intentionally bounded. It is not an open proxy.
+
+- The relay only connects to the configured `-target` base URL.
+- The WebRTC client can request only relative paths, not arbitrary URLs.
+- Only `GET` and `POST` are allowed in relay mode.
+- The target server is intended to be a system you own or are explicitly authorized to test.
+
+This PoC does not execute commands, collect files, install persistence, steal credentials, hide processes, or bypass host controls. It tests network behavior and security-filter visibility.
 
 ## Prerequisites
 
 - Go 1.22 or newer.
-- Network egress that allows UDP between the client and listener. If both peers are behind NAT, the default public STUN server helps them discover reachable candidates.
-- Two hosts or two terminals on one host for a local-only first run.
+- Network egress that allows HTTP signaling from the client to the broker.
+- Network egress that allows WebRTC/UDP between the client and relay, unless both peers are local.
+- A controlled target server, either the included `cmd/target` server or an owned web service.
 
-The project uses Pion WebRTC v3.3.6, the current tagged v3 package shown by Go package documentation as of June 2026.
+The project uses Pion WebRTC v3.3.6.
 
 ## Build
 
@@ -39,6 +65,7 @@ python3 scripts/run_lab.py build
 Manual build:
 
 ```bash
+mkdir -p bin
 go mod tidy
 go test ./...
 go build -o bin ./cmd/...
@@ -47,14 +74,82 @@ go build -o bin ./cmd/...
 On Windows, the build produces:
 
 - `bin/broker.exe`
+- `bin/relay.exe`
+- `bin/webclient.exe`
+- `bin/target.exe`
 - `bin/listener.exe`
 - `bin/client.exe`
 
-On Linux, the build produces:
+On Linux, the build produces the same names without `.exe`.
 
-- `bin/broker`
-- `bin/listener`
-- `bin/client`
+## Quick Relay Demo
+
+Windows:
+
+```powershell
+.\scripts\run-lab.ps1 -Role build
+.\scripts\run-lab.ps1 -Role relay-local -Session relay-local -NoStun
+```
+
+Linux:
+
+```bash
+python3 scripts/run_lab.py build
+python3 scripts/run_lab.py relay-local --session relay-local --no-stun
+```
+
+The relay-local mode starts:
+
+1. broker on `:8080`
+2. controlled target on `:9090`
+3. WebRTC relay pointed at `http://127.0.0.1:9090`
+4. WebRTC client sending synthetic requests through the relay
+
+Success indicators:
+
+- Broker logs `stored offer` and `stored answer`.
+- Relay logs `relay data channel "lab-relay" open`.
+- Relay logs `relay request id=... target=http://127.0.0.1:9090/...`.
+- Target logs `target hit`.
+- Webclient logs `relay response id=... status=200`.
+
+## Split Relay Lab
+
+Use this when you want to test content/security filtering from a monitored client network.
+
+On the server side, run the broker, relay, and target. Replace `SERVER_IP` with the reachable server IP.
+
+Terminal 1:
+
+```bash
+python3 scripts/run_lab.py broker --listen :8080
+```
+
+Terminal 2:
+
+```bash
+python3 scripts/run_lab.py target --target-listen :9090
+```
+
+Terminal 3:
+
+```bash
+python3 scripts/run_lab.py relay --broker-url http://127.0.0.1:8080 --session relay-split --target-url http://127.0.0.1:9090
+```
+
+On the monitored test client:
+
+```bash
+python3 scripts/run_lab.py webclient --broker-url http://SERVER_IP:8080 --session relay-split --paths "/,/healthz,/article-proof?via=webrtc"
+```
+
+Windows client equivalent:
+
+```powershell
+.\scripts\run-lab.ps1 -Role webclient -BrokerUrl http://SERVER_IP:8080 -Session relay-split -Paths "/,/healthz,/article-proof?via=webrtc"
+```
+
+The monitored client should not connect directly to the controlled target. It should connect to the broker for signaling and to the relay over WebRTC. The relay then connects to the target.
 
 ## STUN And Network Reality
 
@@ -62,143 +157,44 @@ You do not always need an external STUN server.
 
 - Same host: no external STUN is needed. Use `-NoStun` or `--no-stun`.
 - Same LAN with direct UDP allowed: external STUN is often not needed.
-- NAT to NAT across networks: STUN is usually needed so each peer can discover its public-facing candidate.
-- Strict enterprise networks: public STUN may be blocked, and UDP peer traffic may also be blocked.
+- NAT to NAT across networks: STUN is usually needed so each peer can discover public-facing candidates.
+- Strict enterprise networks: public STUN may be blocked, and arbitrary peer UDP may also be blocked.
 
-That last case is important for the theory. If an enterprise blocks UDP or known public STUN services, this PoC may complete HTTP signaling but fail during ICE/WebRTC connection. That failure is still useful evidence: it shows the control worked at the NAT traversal or UDP policy layer.
+If HTTP signaling succeeds but ICE/WebRTC never connects, that is still a useful defensive result: the environment allowed rendezvous but blocked the WebRTC tunnel at NAT traversal or UDP policy.
 
-For production WebRTC systems, TURN is the usual fallback when direct UDP fails. TURN relays traffic through an allowed relay and can run over TCP/TLS 443, but it changes the network story because traffic goes through the relay instead of directly between peers. This PoC does not bundle TURN so the direct WebRTC behavior remains easy to observe.
+TURN is the normal WebRTC fallback when direct peer-to-peer connectivity fails. This PoC does not bundle TURN because direct WebRTC behavior is easier to observe and reason about. Adding a TURN relay would change the telemetry because client traffic would go to the TURN server rather than directly to the relay.
 
-## Easy Runners
+## Direct Beacon Mode
 
-Windows PowerShell:
+The older direct C2-shaped emulator is still available for comparison:
+
+Windows:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role build
 .\scripts\run-lab.ps1 -Role local
 ```
 
-The `local` role opens broker, listener, and client in separate PowerShell windows with safe C2-shaped defaults. To run a single role:
-
-```powershell
-.\scripts\run-lab.ps1 -Role broker -Listen :8080
-.\scripts\run-lab.ps1 -Role listener -BrokerUrl http://127.0.0.1:8080 -Session lab-demo
-.\scripts\run-lab.ps1 -Role client -BrokerUrl http://127.0.0.1:8080 -Session lab-demo -Count 8
-```
-
-Linux Python:
+Linux:
 
 ```bash
-python3 scripts/run_lab.py build
 python3 scripts/run_lab.py local
 ```
 
-The Linux runner keeps all local demo processes attached to the same terminal and stops broker/listener when the counted client run finishes. To run a single role:
+This mode uses:
 
-```bash
-python3 scripts/run_lab.py broker --listen :8080
-python3 scripts/run_lab.py listener --broker-url http://127.0.0.1:8080 --session lab-demo
-python3 scripts/run_lab.py client --broker-url http://127.0.0.1:8080 --session lab-demo --count 8
+```text
+[Test Client] == WebRTC DataChannel ==> [Listener]
 ```
 
-Both runners expose the same lab knobs: session id, STUN disablement, beacon interval, jitter, task cadence, synthetic upload size, chunk size, and task delay. Use `-NoStun` in PowerShell or `--no-stun` in Python for a local-only run.
-
-## Local Run
-
-Use three terminals from the repository root.
-
-Terminal 1:
-
-```powershell
-go run ./cmd/broker -listen :8080
-```
-
-Or with the compiled binary:
-
-```powershell
-.\bin\broker.exe -listen :8080
-```
-
-Terminal 2:
-
-```powershell
-go run ./cmd/listener -broker http://127.0.0.1:8080 -session lab-1
-```
-
-Or with the compiled binary:
-
-```powershell
-.\bin\listener.exe -broker http://127.0.0.1:8080 -session lab-1
-```
-
-Terminal 3:
-
-```powershell
-go run ./cmd/client -broker http://127.0.0.1:8080 -session lab-1 -interval 10s -count 6
-```
-
-Or with the compiled binary:
-
-```powershell
-.\bin\client.exe -broker http://127.0.0.1:8080 -session lab-1 -interval 10s -count 6
-```
-
-For a same-LAN or two-host test, run the broker and listener where the monitored client can reach the broker URL. Then point the client at that broker:
-
-```powershell
-go run ./cmd/client -broker http://BROKER_HOST:8080 -session lab-1
-```
-
-To avoid public STUN during a local-only test, pass an empty STUN value to both peers:
-
-```powershell
-go run ./cmd/listener -broker http://127.0.0.1:8080 -session local-only -stun ""
-go run ./cmd/client -broker http://127.0.0.1:8080 -session local-only -stun "" -count 3
-```
-
-## Safe Malware-Like Emulation
-
-The lab can produce C2-shaped traffic without performing real host actions:
-
-- Jittered recurring beacons with a fake host identifier.
-- A fake initial check-in containing synthetic user, OS, and profile fields.
-- Listener-issued simulated tasks every N beacons.
-- Client-side simulated task results after a delay.
-- Synthetic chunk uploads that generate payload-shaped traffic without reading local files.
-
-Example:
-
-```powershell
-go run ./cmd/listener -broker http://127.0.0.1:8080 -session lab-2 -task-every 2 -task-sequence sleep,inventory,synthetic-upload -synthetic-bytes 8192 -chunk-bytes 1024
-go run ./cmd/client -broker http://127.0.0.1:8080 -session lab-2 -interval 8s -jitter 35 -count 8 -task-delay 1s -chunk-delay 250ms
-```
-
-This intentionally does not execute shell commands, collect credentials, read files, install persistence, hide processes, or bypass security controls. It only emulates the timing and message shapes needed for network monitoring research.
-
-## Expected Telemetry
-
-You should see three phases:
-
-1. Signaling: HTTP requests to the broker paths `/sessions/{session}/offer` and `/sessions/{session}/answer`.
-2. ICE/STUN: UDP traffic for candidate gathering and connectivity checks. With the default configuration, this includes STUN traffic to `stun.l.google.com:19302`.
-3. DataChannel traffic: encrypted peer-to-peer WebRTC traffic carrying `LAB_HELLO`, `LAB_BEACON`, `LAB_ACK`, `LAB_TASK`, `LAB_RESULT`, and optional `LAB_CHUNK` messages.
-
-Useful log lines include:
-
-- `stored offer for session`
-- `stored answer for session`
-- `ICE connection state: connected`
-- `data channel "lab-beacon" open`
-- `sent lab heartbeat`
-- `received lab heartbeat`
+It emits `LAB_HELLO`, `LAB_BEACON`, `LAB_ACK`, `LAB_TASK`, `LAB_RESULT`, and optional `LAB_CHUNK` messages. Use it for direct WebRTC C2 telemetry testing. Use relay mode for Snowflake-inspired content-filter testing.
 
 ## Defensive Analysis Notes
 
-This harness helps compare firewall, proxy, EDR, and packet telemetry across the three observable phases without introducing malware-like behavior. For a report, capture:
+For relay mode, compare what each control plane observes:
 
-- Broker access logs and TLS/proxy metadata if you put the broker behind HTTPS.
-- DNS and UDP telemetry for the configured STUN server.
-- Peer-to-peer UDP flow duration, packet size distribution, and cadence.
-- DataChannel heartbeat intervals and total message count.
+- Client DNS/content filter: should see broker/relay infrastructure, not the controlled target URL directly.
+- Firewall: should see HTTP signaling and WebRTC/UDP to the relay.
+- Target server: should see requests coming from the relay host, not the client.
+- EDR/NDR: may detect unusual DataChannel use, STUN traffic, long-lived UDP, or unexpected process behavior.
 
-The main defensive takeaway to test is whether monitoring can distinguish short-lived interactive WebRTC use from long-duration, low-bandwidth DataChannel sessions with regular heartbeat timing.
+This PoC should be run only in systems you own or have explicit permission to test.

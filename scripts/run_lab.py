@@ -43,6 +43,10 @@ def broker_args(args: argparse.Namespace) -> list[str]:
     return ["-listen", args.listen]
 
 
+def target_args(args: argparse.Namespace) -> list[str]:
+    return ["-listen", args.target_listen]
+
+
 def listener_args(args: argparse.Namespace) -> list[str]:
     return [
         "-broker",
@@ -85,6 +89,38 @@ def client_args(args: argparse.Namespace) -> list[str]:
     ]
 
 
+def relay_args(args: argparse.Namespace) -> list[str]:
+    return [
+        "-broker",
+        args.broker_url,
+        "-session",
+        args.session,
+        "-stun",
+        stun_value(args),
+        "-target",
+        args.target_url,
+    ]
+
+
+def webclient_args(args: argparse.Namespace) -> list[str]:
+    return [
+        "-broker",
+        args.broker_url,
+        "-session",
+        args.session,
+        "-stun",
+        stun_value(args),
+        "-paths",
+        args.paths,
+        "-method",
+        args.method,
+        "-body",
+        args.body,
+        "-interval",
+        args.interval,
+    ]
+
+
 def run_foreground(cmd: list[str]) -> int:
     print("+", " ".join(cmd), flush=True)
     return subprocess.call(cmd, cwd=REPO_ROOT)
@@ -94,12 +130,24 @@ def run_broker(args: argparse.Namespace) -> int:
     return run_foreground(role_command("broker", broker_args(args)))
 
 
+def run_target(args: argparse.Namespace) -> int:
+    return run_foreground(role_command("target", target_args(args)))
+
+
 def run_listener(args: argparse.Namespace) -> int:
     return run_foreground(role_command("listener", listener_args(args)))
 
 
 def run_client(args: argparse.Namespace) -> int:
     return run_foreground(role_command("client", client_args(args)))
+
+
+def run_relay(args: argparse.Namespace) -> int:
+    return run_foreground(role_command("relay", relay_args(args)))
+
+
+def run_webclient(args: argparse.Namespace) -> int:
+    return run_foreground(role_command("webclient", webclient_args(args)))
 
 
 def run_local(args: argparse.Namespace) -> int:
@@ -132,6 +180,36 @@ def run_local(args: argparse.Namespace) -> int:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nStopping lab processes...")
+        return 130
+    finally:
+        stop_processes(processes)
+
+
+def run_relay_local(args: argparse.Namespace) -> int:
+    print(f"Starting bounded WebRTC relay lab session '{args.session}'")
+    print(f"The relay only connects to the configured target URL: {args.target_url}")
+
+    processes: list[subprocess.Popen[bytes]] = []
+    try:
+        processes.append(
+            subprocess.Popen(role_command("broker", broker_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        processes.append(
+            subprocess.Popen(role_command("target", target_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        processes.append(
+            subprocess.Popen(role_command("relay", relay_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        webclient = subprocess.Popen(
+            role_command("webclient", webclient_args(args)), cwd=REPO_ROOT
+        )
+        processes.append(webclient)
+        return webclient.wait()
+    except KeyboardInterrupt:
+        print("\nStopping relay lab processes...")
         return 130
     finally:
         stop_processes(processes)
@@ -186,6 +264,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--session", default="lab-demo")
     parser.add_argument("--broker-url", default="http://127.0.0.1:8080")
     parser.add_argument("--listen", default=":8080")
+    parser.add_argument("--target-listen", default=":9090")
+    parser.add_argument("--target-url", default="http://127.0.0.1:9090")
     parser.add_argument("--stun", default=DEFAULT_STUN)
     parser.add_argument("--no-stun", action="store_true")
     parser.add_argument("--interval", default="8s")
@@ -200,6 +280,9 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--chunk-bytes", type=int, default=1024)
     parser.add_argument("--task-delay", default="1s")
     parser.add_argument("--chunk-delay", default="250ms")
+    parser.add_argument("--paths", default="/,/healthz,/article-proof?via=webrtc")
+    parser.add_argument("--method", choices=["GET", "POST"], default="GET")
+    parser.add_argument("--body", default="synthetic relay lab body")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -210,16 +293,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     commands = {
         "local": run_local,
+        "relay-local": run_relay_local,
         "broker": run_broker,
+        "target": run_target,
         "listener": run_listener,
         "client": run_client,
+        "relay": run_relay,
+        "webclient": run_webclient,
         "build": run_build,
         "test": run_test,
     }
 
     for name, func in commands.items():
         subparser = subparsers.add_parser(name)
-        if name in {"local", "broker", "listener", "client"}:
+        if name in {"local", "relay-local", "broker", "listener", "client", "target", "relay", "webclient"}:
             add_common_args(subparser)
         subparser.set_defaults(func=func)
 

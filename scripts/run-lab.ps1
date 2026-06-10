@@ -1,10 +1,12 @@
 param(
-    [ValidateSet("local", "broker", "listener", "client", "build", "test")]
+    [ValidateSet("local", "relay-local", "broker", "listener", "client", "target", "relay", "webclient", "build", "test")]
     [string]$Role = "local",
 
     [string]$Session = "lab-demo",
     [string]$BrokerUrl = "http://127.0.0.1:8080",
     [string]$Listen = ":8080",
+    [string]$TargetListen = ":9090",
+    [string]$TargetUrl = "http://127.0.0.1:9090",
     [string]$Stun = "stun:stun.l.google.com:19302",
     [switch]$NoStun,
 
@@ -18,7 +20,12 @@ param(
     [int]$SyntheticBytes = 8192,
     [int]$ChunkBytes = 1024,
     [string]$TaskDelay = "1s",
-    [string]$ChunkDelay = "250ms"
+    [string]$ChunkDelay = "250ms",
+
+    [string]$Paths = "/,/healthz,/article-proof?via=webrtc",
+    [ValidateSet("GET", "POST")]
+    [string]$Method = "GET",
+    [string]$Body = "synthetic relay lab body"
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,7 +49,7 @@ function Test-CommandAvailable {
 function Invoke-GoOrBinary {
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet("broker", "listener", "client")]
+        [ValidateSet("broker", "listener", "client", "target", "relay", "webclient")]
         [string]$CommandName,
 
         [string[]]$CommandArgs
@@ -74,6 +81,10 @@ function Invoke-Broker {
     Invoke-GoOrBinary -CommandName "broker" -CommandArgs @("-listen", $Listen)
 }
 
+function Invoke-Target {
+    Invoke-GoOrBinary -CommandName "target" -CommandArgs @("-listen", $TargetListen)
+}
+
 function Invoke-Listener {
     Invoke-GoOrBinary -CommandName "listener" -CommandArgs @(
         "-broker", $BrokerUrl,
@@ -100,6 +111,27 @@ function Invoke-Client {
     )
 }
 
+function Invoke-Relay {
+    Invoke-GoOrBinary -CommandName "relay" -CommandArgs @(
+        "-broker", $BrokerUrl,
+        "-session", $Session,
+        "-stun", (Get-StunArg),
+        "-target", $TargetUrl
+    )
+}
+
+function Invoke-WebClient {
+    Invoke-GoOrBinary -CommandName "webclient" -CommandArgs @(
+        "-broker", $BrokerUrl,
+        "-session", $Session,
+        "-stun", (Get-StunArg),
+        "-paths", $Paths,
+        "-method", $Method,
+        "-body", $Body,
+        "-interval", $Interval
+    )
+}
+
 function Start-LabWindow {
     param(
         [string]$Title,
@@ -114,6 +146,8 @@ function Start-LabWindow {
         "-Session", $Session,
         "-BrokerUrl", $BrokerUrl,
         "-Listen", $Listen,
+        "-TargetListen", $TargetListen,
+        "-TargetUrl", $TargetUrl,
         "-Stun", (Get-StunArg),
         "-Interval", $Interval,
         "-Jitter", "$Jitter",
@@ -124,7 +158,10 @@ function Start-LabWindow {
         "-SyntheticBytes", "$SyntheticBytes",
         "-ChunkBytes", "$ChunkBytes",
         "-TaskDelay", $TaskDelay,
-        "-ChunkDelay", $ChunkDelay
+        "-ChunkDelay", $ChunkDelay,
+        "-Paths", $Paths,
+        "-Method", $Method,
+        "-Body", $Body
     )
 
     if ($NoStun) {
@@ -147,6 +184,22 @@ function Invoke-LocalLab {
 
     Write-Host ""
     Write-Host "Watch the three PowerShell windows for LAB_HELLO, LAB_BEACON, LAB_TASK, LAB_RESULT, and LAB_CHUNK messages."
+}
+
+function Invoke-RelayLocalLab {
+    Write-Host "Starting bounded WebRTC relay lab session '$Session'"
+    Write-Host "The relay only connects to the configured target URL: $TargetUrl"
+
+    Start-LabWindow -Title "broker" -WindowRole "broker"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "target" -WindowRole "target"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "relay" -WindowRole "relay"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "webclient" -WindowRole "webclient"
+
+    Write-Host ""
+    Write-Host "Watch for LAB_RELAY_REQUEST/LAB_RELAY_RESPONSE logs and target hit logs."
 }
 
 function Invoke-Build {
@@ -184,9 +237,13 @@ function Invoke-Test {
 
 switch ($Role) {
     "local" { Invoke-LocalLab }
+    "relay-local" { Invoke-RelayLocalLab }
     "broker" { Invoke-Broker }
     "listener" { Invoke-Listener }
     "client" { Invoke-Client }
+    "target" { Invoke-Target }
+    "relay" { Invoke-Relay }
+    "webclient" { Invoke-WebClient }
     "build" { Invoke-Build }
     "test" { Invoke-Test }
 }
