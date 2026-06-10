@@ -108,18 +108,20 @@ function Invoke-Target {
 }
 
 function Invoke-Listener {
-    Invoke-GoOrBinary -CommandName "listener" -CommandArgs @(
+    $args = @(
         "-broker", $BrokerUrl,
         "-session", $Session,
         "-task-every", "$TaskEvery",
         "-task-sequence", $TaskSequence,
         "-synthetic-bytes", "$SyntheticBytes",
         "-chunk-bytes", "$ChunkBytes"
-    ) + (Get-StunNativeArgs)
+    )
+    $args += Get-StunNativeArgs
+    Invoke-GoOrBinary -CommandName "listener" -CommandArgs $args
 }
 
 function Invoke-Client {
-    Invoke-GoOrBinary -CommandName "client" -CommandArgs @(
+    $args = @(
         "-broker", $BrokerUrl,
         "-session", $Session,
         "-interval", $Interval,
@@ -128,26 +130,32 @@ function Invoke-Client {
         "-host-id", $HostId,
         "-task-delay", $TaskDelay,
         "-chunk-delay", $ChunkDelay
-    ) + (Get-StunNativeArgs)
+    )
+    $args += Get-StunNativeArgs
+    Invoke-GoOrBinary -CommandName "client" -CommandArgs $args
 }
 
 function Invoke-Relay {
-    Invoke-GoOrBinary -CommandName "relay" -CommandArgs @(
+    $args = @(
         "-broker", $BrokerUrl,
         "-session", $Session,
         "-target", $TargetUrl
-    ) + (Get-StunNativeArgs)
+    )
+    $args += Get-StunNativeArgs
+    Invoke-GoOrBinary -CommandName "relay" -CommandArgs $args
 }
 
 function Invoke-WebClient {
-    Invoke-GoOrBinary -CommandName "webclient" -CommandArgs @(
+    $args = @(
         "-broker", $BrokerUrl,
         "-session", $Session,
         "-paths", $Paths,
         "-method", $Method,
         "-body", $Body,
         "-interval", $Interval
-    ) + (Get-StunNativeArgs)
+    )
+    $args += Get-StunNativeArgs
+    Invoke-GoOrBinary -CommandName "webclient" -CommandArgs $args
 }
 
 function Start-LabWindow {
