@@ -23,9 +23,9 @@ import (
 
 func main() {
 	brokerURL := flag.String("broker", "http://127.0.0.1:8080", "signaling broker URL")
-	sessionID := flag.String("session", "relay-session", "shared signaling session id")
+	sessionID := flag.String("session", "proxy-session", "shared signaling session id")
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
-	target := flag.String("target", "http://127.0.0.1:9090", "single controlled target base URL")
+	target := flag.String("target", "http://127.0.0.1:9090", "single controlled target base URL for the bounded proxy server")
 	maxBody := flag.Int64("max-body", 4096, "maximum response body bytes returned to the client")
 	requestTimeout := flag.Duration("request-timeout", 10*time.Second, "target request timeout")
 	pollInterval := flag.Duration("poll", time.Second, "broker polling interval")
@@ -63,10 +63,10 @@ func main() {
 	})
 
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {
-		log.Printf("relay data channel %q created by client; target=%s", d.Label(), targetURL.String())
+		log.Printf("proxy data channel %q created by client; target=%s", d.Label(), targetURL.String())
 
 		d.OnOpen(func() {
-			log.Printf("relay data channel %q open", d.Label())
+			log.Printf("proxy data channel %q open", d.Label())
 		})
 
 		d.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -74,7 +74,7 @@ func main() {
 		})
 	})
 
-	log.Printf("relay waiting for SDP offer at %s session %q", *brokerURL, *sessionID)
+	log.Printf("proxy server waiting for SDP offer at %s session %q", *brokerURL, *sessionID)
 	offerSignal, err := lab.PollSignal(signalCtx, *brokerURL, *sessionID, "offer", *pollInterval)
 	if err != nil {
 		log.Fatalf("poll offer: %v", err)
@@ -111,7 +111,7 @@ func main() {
 		log.Fatalf("post answer: %v", err)
 	}
 
-	log.Printf("answer posted; relay is ready for bounded WebRTC target requests")
+	log.Printf("answer posted; proxy server is ready for bounded WebRTC target requests")
 	<-ctx.Done()
 }
 
@@ -135,14 +135,14 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 	if err := json.Unmarshal(data, &relayReq); err != nil {
 		sendRelayResponse(d, lab.RelayResponse{
 			Type:  lab.RelayResponseType,
-			Error: "invalid JSON relay request",
+			Error: "invalid JSON proxy request",
 			Time:  time.Now().UTC().Format(time.RFC3339),
 		})
 		return
 	}
 
 	if relayReq.Type != lab.RelayRequestType {
-		sendRelayResponse(d, errorResponse(relayReq.ID, "unsupported relay message type"))
+		sendRelayResponse(d, errorResponse(relayReq.ID, "unsupported proxy message type"))
 		return
 	}
 
@@ -171,14 +171,14 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		sendRelayResponse(d, errorResponse(relayReq.ID, "build target request failed"))
 		return
 	}
-	req.Header.Set("User-Agent", "snowflakeprotocolpoc-relay/1.0")
-	req.Header.Set("X-WebRTC-Relay-Lab", "true")
-	req.Header.Set("X-Relay-Request-ID", relayReq.ID)
+	req.Header.Set("User-Agent", "snowflakeprotocolpoc-proxy/1.0")
+	req.Header.Set("X-WebRTC-Proxy-Lab", "true")
+	req.Header.Set("X-Proxy-Request-ID", relayReq.ID)
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "text/plain")
 	}
 
-	log.Printf("relay request id=%s method=%s target=%s", relayReq.ID, method, requestURL)
+	log.Printf("proxy request id=%s method=%s target=%s", relayReq.ID, method, requestURL)
 	resp, err := client.Do(req)
 	if err != nil {
 		sendRelayResponse(d, errorResponse(relayReq.ID, fmt.Sprintf("target request failed: %v", err)))
@@ -256,10 +256,10 @@ func errorResponse(id, message string) lab.RelayResponse {
 func sendRelayResponse(d *webrtc.DataChannel, response lab.RelayResponse) {
 	payload, err := json.Marshal(response)
 	if err != nil {
-		log.Printf("marshal relay response: %v", err)
+		log.Printf("marshal proxy response: %v", err)
 		return
 	}
 	if err := d.Send(payload); err != nil {
-		log.Printf("send relay response: %v", err)
+		log.Printf("send proxy response: %v", err)
 	}
 }

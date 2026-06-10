@@ -35,12 +35,15 @@ func main() {
 func handleRequest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	requestID := r.Header.Get("X-Relay-Request-ID")
+	requestID := r.Header.Get("X-Proxy-Request-ID")
+	if requestID == "" {
+		requestID = r.Header.Get("X-Relay-Request-ID")
+	}
 	log.Printf("target hit: method=%s path=%s request_id=%s remote=%s", r.Method, r.URL.RequestURI(), requestID, r.RemoteAddr)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(targetResponse{
-		Message:   "controlled target reached through WebRTC relay lab",
+		Message:   "controlled target reached through WebRTC proxy lab",
 		Method:    r.Method,
 		Path:      r.URL.RequestURI(),
 		RequestID: requestID,

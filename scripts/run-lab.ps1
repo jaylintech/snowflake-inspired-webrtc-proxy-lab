@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("local", "relay-local", "broker", "listener", "client", "target", "relay", "webclient", "build", "test")]
+    [ValidateSet("local", "relay-local", "proxy-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "build", "test")]
     [string]$Role = "local",
 
     [string]$Session = "lab-demo",
@@ -25,7 +25,7 @@ param(
     [string]$Paths = "/,/healthz,/article-proof?via=webrtc",
     [ValidateSet("GET", "POST")]
     [string]$Method = "GET",
-    [string]$Body = "synthetic relay lab body"
+    [string]$Body = "synthetic proxy lab body"
 )
 
 $ErrorActionPreference = "Stop"
@@ -215,19 +215,19 @@ function Invoke-LocalLab {
 }
 
 function Invoke-RelayLocalLab {
-    Write-Host "Starting bounded WebRTC relay lab session '$Session'"
-    Write-Host "The relay only connects to the configured target URL: $TargetUrl"
+    Write-Host "Starting bounded WebRTC proxy lab session '$Session'"
+    Write-Host "The proxy server only connects to the configured target URL: $TargetUrl"
 
     Start-LabWindow -Title "broker" -WindowRole "broker"
     Start-Sleep -Seconds 1
     Start-LabWindow -Title "target" -WindowRole "target"
     Start-Sleep -Seconds 1
-    Start-LabWindow -Title "relay" -WindowRole "relay"
+    Start-LabWindow -Title "proxy" -WindowRole "proxy"
     Start-Sleep -Seconds 1
     Start-LabWindow -Title "webclient" -WindowRole "webclient"
 
     Write-Host ""
-    Write-Host "Watch for LAB_RELAY_REQUEST/LAB_RELAY_RESPONSE logs and target hit logs."
+    Write-Host "Watch for proxy request/response logs and target hit logs."
 }
 
 function Invoke-Build {
@@ -268,11 +268,13 @@ function Invoke-Test {
 switch ($Role) {
     "local" { Invoke-LocalLab }
     "relay-local" { Invoke-RelayLocalLab }
+    "proxy-local" { Invoke-RelayLocalLab }
     "broker" { Invoke-Broker }
     "listener" { Invoke-Listener }
     "client" { Invoke-Client }
     "target" { Invoke-Target }
     "relay" { Invoke-Relay }
+    "proxy" { Invoke-Relay }
     "webclient" { Invoke-WebClient }
     "build" { Invoke-Build }
     "test" { Invoke-Test }

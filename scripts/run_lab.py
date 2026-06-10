@@ -186,8 +186,8 @@ def run_local(args: argparse.Namespace) -> int:
 
 
 def run_relay_local(args: argparse.Namespace) -> int:
-    print(f"Starting bounded WebRTC relay lab session '{args.session}'")
-    print(f"The relay only connects to the configured target URL: {args.target_url}")
+    print(f"Starting bounded WebRTC proxy lab session '{args.session}'")
+    print(f"The proxy server only connects to the configured target URL: {args.target_url}")
 
     processes: list[subprocess.Popen[bytes]] = []
     try:
@@ -209,7 +209,7 @@ def run_relay_local(args: argparse.Namespace) -> int:
         processes.append(webclient)
         return webclient.wait()
     except KeyboardInterrupt:
-        print("\nStopping relay lab processes...")
+        print("\nStopping proxy lab processes...")
         return 130
     finally:
         stop_processes(processes)
@@ -282,7 +282,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--chunk-delay", default="250ms")
     parser.add_argument("--paths", default="/,/healthz,/article-proof?via=webrtc")
     parser.add_argument("--method", choices=["GET", "POST"], default="GET")
-    parser.add_argument("--body", default="synthetic relay lab body")
+    parser.add_argument("--body", default="synthetic proxy lab body")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -294,11 +294,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     commands = {
         "local": run_local,
         "relay-local": run_relay_local,
+        "proxy-local": run_relay_local,
         "broker": run_broker,
         "target": run_target,
         "listener": run_listener,
         "client": run_client,
         "relay": run_relay,
+        "proxy": run_relay,
         "webclient": run_webclient,
         "build": run_build,
         "test": run_test,
@@ -306,7 +308,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     for name, func in commands.items():
         subparser = subparsers.add_parser(name)
-        if name in {"local", "relay-local", "broker", "listener", "client", "target", "relay", "webclient"}:
+        if name in {"local", "relay-local", "proxy-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient"}:
             add_common_args(subparser)
         subparser.set_defaults(func=func)
 

@@ -1,8 +1,8 @@
 package lab
 
 const (
-	RelayRequestType  = "LAB_RELAY_REQUEST"
-	RelayResponseType = "LAB_RELAY_RESPONSE"
+	RelayRequestType  = "LAB_PROXY_REQUEST"
+	RelayResponseType = "LAB_PROXY_RESPONSE"
 )
 
 type RelayRequest struct {

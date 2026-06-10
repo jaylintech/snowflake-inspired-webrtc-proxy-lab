@@ -21,12 +21,12 @@ import (
 
 func main() {
 	brokerURL := flag.String("broker", "http://127.0.0.1:8080", "signaling broker URL")
-	sessionID := flag.String("session", "relay-session", "shared signaling session id")
+	sessionID := flag.String("session", "proxy-session", "shared signaling session id")
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
-	paths := flag.String("paths", "/,/healthz,/article-proof?via=webrtc", "comma-separated relative paths to request through the relay")
+	paths := flag.String("paths", "/,/healthz,/article-proof?via=webrtc", "comma-separated relative paths to request through the proxy server")
 	method := flag.String("method", httpMethodGet, "GET or POST")
-	body := flag.String("body", "synthetic relay lab body", "POST body used when method is POST")
-	interval := flag.Duration("interval", time.Second, "delay between relayed requests")
+	body := flag.String("body", "synthetic proxy lab body", "POST body used when method is POST")
+	interval := flag.Duration("interval", time.Second, "delay between proxied requests")
 	timeout := flag.Duration("timeout", 5*time.Minute, "maximum time to wait for signaling and responses")
 	pollInterval := flag.Duration("poll", time.Second, "broker polling interval")
 	flag.Parse()
@@ -59,7 +59,7 @@ func main() {
 		log.Printf("peer connection state: %s", state.String())
 	})
 
-	dataChannel, err := pc.CreateDataChannel("lab-relay", nil)
+	dataChannel, err := pc.CreateDataChannel("lab-proxy", nil)
 	if err != nil {
 		log.Fatalf("create data channel: %v", err)
 	}
@@ -69,19 +69,19 @@ func main() {
 	var closeDone sync.Once
 
 	dataChannel.OnOpen(func() {
-		log.Printf("relay data channel %q open; sending %d bounded target request(s)", dataChannel.Label(), len(requestPaths))
+		log.Printf("proxy data channel %q open; sending %d bounded target request(s)", dataChannel.Label(), len(requestPaths))
 		go sendRelayRequests(ctx, dataChannel, requestPaths, strings.ToUpper(*method), *body, *interval)
 	})
 	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
 		var response lab.RelayResponse
 		if err := json.Unmarshal(msg.Data, &response); err != nil {
-			log.Printf("invalid relay response: %s", string(msg.Data))
+			log.Printf("invalid proxy response: %s", string(msg.Data))
 			return
 		}
 		if response.Error != "" {
-			log.Printf("relay response id=%s error=%s", response.ID, response.Error)
+			log.Printf("proxy response id=%s error=%s", response.ID, response.Error)
 		} else {
-			log.Printf("relay response id=%s status=%d bytes=%d target=%s preview=%q", response.ID, response.Status, response.Bytes, response.Target, response.BodyPreview)
+			log.Printf("proxy response id=%s status=%d bytes=%d target=%s preview=%q", response.ID, response.Status, response.Bytes, response.Target, response.BodyPreview)
 		}
 
 		if atomic.AddUint64(&responses, 1) >= uint64(len(requestPaths)) {
@@ -108,7 +108,7 @@ func main() {
 	if err := lab.PutSignal(signalCtx, *brokerURL, *sessionID, "offer", lab.FromDescription(*localOffer)); err != nil {
 		log.Fatalf("post offer: %v", err)
 	}
-	log.Printf("offer posted to %s session %q; waiting for relay answer", *brokerURL, *sessionID)
+	log.Printf("offer posted to %s session %q; waiting for proxy answer", *brokerURL, *sessionID)
 
 	answerSignal, err := lab.PollSignal(signalCtx, *brokerURL, *sessionID, "answer", *pollInterval)
 	if err != nil {
@@ -128,9 +128,9 @@ func main() {
 
 	select {
 	case <-done:
-		log.Printf("received all relay responses; exiting")
+		log.Printf("received all proxy responses; exiting")
 	case <-signalCtx.Done():
-		log.Printf("timed out waiting for relay responses: %v", signalCtx.Err())
+		log.Printf("timed out waiting for proxy responses: %v", signalCtx.Err())
 	}
 }
 
@@ -143,7 +143,7 @@ func sendRelayRequests(ctx context.Context, dataChannel *webrtc.DataChannel, pat
 	for i, path := range paths {
 		request := lab.RelayRequest{
 			Type:   lab.RelayRequestType,
-			ID:     fmt.Sprintf("relay-%03d", i+1),
+			ID:     fmt.Sprintf("proxy-%03d", i+1),
 			Method: method,
 			Path:   path,
 		}
@@ -153,14 +153,14 @@ func sendRelayRequests(ctx context.Context, dataChannel *webrtc.DataChannel, pat
 
 		payload, err := json.Marshal(request)
 		if err != nil {
-			log.Printf("marshal relay request: %v", err)
+			log.Printf("marshal proxy request: %v", err)
 			return
 		}
 		if err := dataChannel.Send(payload); err != nil {
-			log.Printf("send relay request: %v", err)
+			log.Printf("send proxy request: %v", err)
 			return
 		}
-		log.Printf("sent relay request id=%s method=%s path=%s", request.ID, request.Method, request.Path)
+		log.Printf("sent proxy request id=%s method=%s path=%s", request.ID, request.Method, request.Path)
 
 		if i == len(paths)-1 || interval <= 0 {
 			continue
