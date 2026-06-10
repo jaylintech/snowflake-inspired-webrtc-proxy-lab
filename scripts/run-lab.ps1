@@ -41,9 +41,30 @@ function Get-StunArg {
     return $Stun
 }
 
+function Get-StunNativeArgs {
+    if ($NoStun) {
+        return @("-stun=")
+    }
+    return @("-stun", $Stun)
+}
+
 function Test-CommandAvailable {
     param([string]$Name)
     return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Get-GoCommand {
+    $cmd = Get-Command "go" -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+
+    $defaultGo = "C:\Program Files\Go\bin\go.exe"
+    if (Test-Path $defaultGo) {
+        return $defaultGo
+    }
+
+    return $null
 }
 
 function Invoke-GoOrBinary {
@@ -63,10 +84,11 @@ function Invoke-GoOrBinary {
         return
     }
 
-    if (Test-CommandAvailable "go") {
+    $go = Get-GoCommand
+    if ($go) {
         Push-Location $repoRoot
         try {
-            & go run ".\cmd\$CommandName" @CommandArgs
+            & $go run ".\cmd\$CommandName" @CommandArgs
         }
         finally {
             Pop-Location
@@ -89,47 +111,43 @@ function Invoke-Listener {
     Invoke-GoOrBinary -CommandName "listener" -CommandArgs @(
         "-broker", $BrokerUrl,
         "-session", $Session,
-        "-stun", (Get-StunArg),
         "-task-every", "$TaskEvery",
         "-task-sequence", $TaskSequence,
         "-synthetic-bytes", "$SyntheticBytes",
         "-chunk-bytes", "$ChunkBytes"
-    )
+    ) + (Get-StunNativeArgs)
 }
 
 function Invoke-Client {
     Invoke-GoOrBinary -CommandName "client" -CommandArgs @(
         "-broker", $BrokerUrl,
         "-session", $Session,
-        "-stun", (Get-StunArg),
         "-interval", $Interval,
         "-jitter", "$Jitter",
         "-count", "$Count",
         "-host-id", $HostId,
         "-task-delay", $TaskDelay,
         "-chunk-delay", $ChunkDelay
-    )
+    ) + (Get-StunNativeArgs)
 }
 
 function Invoke-Relay {
     Invoke-GoOrBinary -CommandName "relay" -CommandArgs @(
         "-broker", $BrokerUrl,
         "-session", $Session,
-        "-stun", (Get-StunArg),
         "-target", $TargetUrl
-    )
+    ) + (Get-StunNativeArgs)
 }
 
 function Invoke-WebClient {
     Invoke-GoOrBinary -CommandName "webclient" -CommandArgs @(
         "-broker", $BrokerUrl,
         "-session", $Session,
-        "-stun", (Get-StunArg),
         "-paths", $Paths,
         "-method", $Method,
         "-body", $Body,
         "-interval", $Interval
-    )
+    ) + (Get-StunNativeArgs)
 }
 
 function Start-LabWindow {
@@ -148,7 +166,6 @@ function Start-LabWindow {
         "-Listen", $Listen,
         "-TargetListen", $TargetListen,
         "-TargetUrl", $TargetUrl,
-        "-Stun", (Get-StunArg),
         "-Interval", $Interval,
         "-Jitter", "$Jitter",
         "-Count", "$Count",
@@ -166,6 +183,9 @@ function Start-LabWindow {
 
     if ($NoStun) {
         $argList += "-NoStun"
+    }
+    else {
+        $argList += @("-Stun", $Stun)
     }
 
     Start-Process -FilePath "powershell.exe" -ArgumentList $argList -WindowStyle Normal
@@ -206,14 +226,15 @@ function Invoke-Build {
     $repoRoot = Get-RepoRoot
     Push-Location $repoRoot
     try {
-        if (-not (Test-CommandAvailable "go")) {
+        $go = Get-GoCommand
+        if (-not $go) {
             throw "Go 1.22+ is required. Install it from https://go.dev/dl/, restart PowerShell, then rerun this command."
         }
 
         New-Item -ItemType Directory -Force -Path "bin" | Out-Null
-        go mod tidy
-        go test ./...
-        go build -o bin ./cmd/...
+        & $go mod tidy
+        & $go test ./...
+        & $go build -o bin ./cmd/...
     }
     finally {
         Pop-Location
@@ -224,11 +245,12 @@ function Invoke-Test {
     $repoRoot = Get-RepoRoot
     Push-Location $repoRoot
     try {
-        if (-not (Test-CommandAvailable "go")) {
+        $go = Get-GoCommand
+        if (-not $go) {
             throw "Go 1.22+ is required. Install it from https://go.dev/dl/, restart PowerShell, then rerun this command."
         }
 
-        go test ./...
+        & $go test ./...
     }
     finally {
         Pop-Location
