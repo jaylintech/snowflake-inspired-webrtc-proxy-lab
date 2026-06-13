@@ -230,6 +230,8 @@ example.com/robots.txt
 
 The viewer converts those to relative paths before sending the request over WebRTC. A different hostname is blocked in the UI because the proxy session is bounded to the configured target.
 
+Large HTML responses are split into DataChannel-safe chunks and reassembled in the viewer. If the page says the body was truncated, raise the proxy-side `-MaxBody` value for that lab run.
+
 Expected browser UI logs:
 
 ```text

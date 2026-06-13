@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -67,6 +68,7 @@ func main() {
 	var responses uint64
 	done := make(chan struct{})
 	var closeDone sync.Once
+	assembler := newResponseAssembler()
 
 	dataChannel.OnOpen(func() {
 		log.Printf("proxy data channel %q open; sending %d bounded target request(s)", dataChannel.Label(), len(requestPaths))
@@ -78,6 +80,20 @@ func main() {
 			log.Printf("invalid proxy response: %s", string(msg.Data))
 			return
 		}
+
+		if response.Type == lab.RelayResponseChunkType {
+			assembled, complete, err := assembler.add(response)
+			if err != nil {
+				log.Printf("invalid proxy response chunk id=%s: %v", response.ID, err)
+				return
+			}
+			log.Printf("proxy response chunk id=%s chunk=%d/%d", response.ID, response.ChunkIndex+1, response.ChunkTotal)
+			if !complete {
+				return
+			}
+			response = assembled
+		}
+
 		if response.Error != "" {
 			log.Printf("proxy response id=%s error=%s", response.ID, response.Error)
 		} else {
@@ -182,4 +198,81 @@ func splitPaths(raw string) []string {
 		}
 	}
 	return out
+}
+
+type responseAssembler struct {
+	mu      sync.Mutex
+	pending map[string]*chunkedResponse
+}
+
+type chunkedResponse struct {
+	response lab.RelayResponse
+	chunks   []string
+	received int
+}
+
+func newResponseAssembler() *responseAssembler {
+	return &responseAssembler{pending: make(map[string]*chunkedResponse)}
+}
+
+func (a *responseAssembler) add(chunk lab.RelayResponse) (lab.RelayResponse, bool, error) {
+	if chunk.ID == "" {
+		return lab.RelayResponse{}, false, fmt.Errorf("missing response id")
+	}
+	if chunk.ChunkTotal <= 0 {
+		return lab.RelayResponse{}, false, fmt.Errorf("missing chunk total")
+	}
+	if chunk.ChunkIndex < 0 || chunk.ChunkIndex >= chunk.ChunkTotal {
+		return lab.RelayResponse{}, false, fmt.Errorf("chunk index %d outside total %d", chunk.ChunkIndex, chunk.ChunkTotal)
+	}
+	if chunk.BodyEncoding != "base64" {
+		return lab.RelayResponse{}, false, fmt.Errorf("unsupported body encoding %q", chunk.BodyEncoding)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	state := a.pending[chunk.ID]
+	if state == nil {
+		state = &chunkedResponse{
+			response: chunk,
+			chunks:   make([]string, chunk.ChunkTotal),
+		}
+		a.pending[chunk.ID] = state
+	}
+	if len(state.chunks) != chunk.ChunkTotal {
+		delete(a.pending, chunk.ID)
+		return lab.RelayResponse{}, false, fmt.Errorf("chunk total changed from %d to %d", len(state.chunks), chunk.ChunkTotal)
+	}
+	if state.chunks[chunk.ChunkIndex] == "" {
+		state.received++
+	}
+	state.chunks[chunk.ChunkIndex] = chunk.BodyChunk
+
+	if state.received < len(state.chunks) {
+		return lab.RelayResponse{}, false, nil
+	}
+
+	var body []byte
+	for i, encoded := range state.chunks {
+		if encoded == "" {
+			return lab.RelayResponse{}, false, fmt.Errorf("missing chunk %d", i)
+		}
+		part, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return lab.RelayResponse{}, false, fmt.Errorf("decode chunk %d: %w", i, err)
+		}
+		body = append(body, part...)
+	}
+
+	delete(a.pending, chunk.ID)
+
+	response := state.response
+	response.Type = lab.RelayResponseType
+	response.BodyEncoding = ""
+	response.BodyChunk = ""
+	response.ChunkIndex = 0
+	response.ChunkTotal = 0
+	response.Body = string(body)
+	return response, true, nil
 }

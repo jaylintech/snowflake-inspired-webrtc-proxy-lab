@@ -312,6 +312,7 @@ const browserPage = `<!doctype html>
       targetUrl: {{ .TargetURL }}
     };
     const requestType = "LAB_PROXY_REQUEST";
+    const responseChunkType = "LAB_PROXY_RESPONSE_CHUNK";
 
     const brokerInput = document.getElementById("broker");
     const targetInput = document.getElementById("target");
@@ -329,6 +330,7 @@ const browserPage = `<!doctype html>
     let channel = null;
     let requestCount = 0;
     let shadow = null;
+    const pendingResponses = new Map();
 
     brokerInput.value = config.brokerUrl;
     targetInput.value = config.targetUrl;
@@ -615,6 +617,11 @@ const browserPage = `<!doctype html>
         return;
       }
 
+      if (response.type === responseChunkType) {
+        handleProxyResponseChunk(response);
+        return;
+      }
+
       if (response.error) {
         logLine("proxy response id=" + response.id + " error=" + response.error);
         renderError(response.error);
@@ -623,6 +630,92 @@ const browserPage = `<!doctype html>
 
       logLine("proxy response id=" + response.id + " status=" + response.status + " bytes=" + response.bytes + " target=" + response.target);
       renderResponse(response);
+    }
+
+    function handleProxyResponseChunk(chunk) {
+      if (!chunk.id || !Number.isInteger(chunk.chunk_total) || !Number.isInteger(chunk.chunk_index)) {
+        logLine("invalid proxy response chunk metadata");
+        return;
+      }
+      if (chunk.chunk_total <= 0 || chunk.chunk_index < 0 || chunk.chunk_index >= chunk.chunk_total) {
+        logLine("invalid proxy response chunk index for id=" + chunk.id);
+        return;
+      }
+      if (chunk.body_encoding !== "base64") {
+        logLine("unsupported proxy response chunk encoding for id=" + chunk.id + ": " + chunk.body_encoding);
+        return;
+      }
+
+      let state = pendingResponses.get(chunk.id);
+      if (!state) {
+        state = {
+          response: chunk,
+          chunks: new Array(chunk.chunk_total),
+          received: 0
+        };
+        pendingResponses.set(chunk.id, state);
+      }
+      if (state.chunks.length !== chunk.chunk_total) {
+        pendingResponses.delete(chunk.id);
+        logLine("discarded proxy response id=" + chunk.id + " because chunk total changed");
+        return;
+      }
+      if (!state.chunks[chunk.chunk_index]) {
+        state.received += 1;
+      }
+      state.chunks[chunk.chunk_index] = chunk.body_chunk || "";
+
+      logLine("proxy response chunk id=" + chunk.id + " chunk=" + (chunk.chunk_index + 1) + "/" + chunk.chunk_total);
+      if (state.received < state.chunks.length) {
+        return;
+      }
+
+      try {
+        const body = decodeChunkedBody(state.chunks);
+        const complete = Object.assign({}, state.response, {
+          type: "LAB_PROXY_RESPONSE",
+          body: body,
+          body_chunk: "",
+          body_encoding: "",
+          chunk_index: 0,
+          chunk_total: 0
+        });
+        pendingResponses.delete(chunk.id);
+        logLine("proxy response id=" + complete.id + " status=" + complete.status + " bytes=" + complete.bytes + " target=" + complete.target);
+        renderResponse(complete);
+      } catch (error) {
+        pendingResponses.delete(chunk.id);
+        logLine("failed to assemble proxy response id=" + chunk.id + ": " + error.message);
+      }
+    }
+
+    function decodeChunkedBody(chunks) {
+      const parts = chunks.map(function (encoded, index) {
+        if (!encoded) {
+          throw new Error("missing chunk " + (index + 1));
+        }
+        return base64ToBytes(encoded);
+      });
+
+      const total = parts.reduce(function (sum, part) {
+        return sum + part.length;
+      }, 0);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      parts.forEach(function (part) {
+        merged.set(part, offset);
+        offset += part.length;
+      });
+      return new TextDecoder().decode(merged);
+    }
+
+    function base64ToBytes(encoded) {
+      const binary = atob(encoded);
+      const out = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        out[i] = binary.charCodeAt(i);
+      }
+      return out;
     }
 
     function renderResponse(response) {

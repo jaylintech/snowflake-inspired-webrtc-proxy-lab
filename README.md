@@ -122,6 +122,8 @@ http://127.0.0.1:7777
 
 The viewer accepts relative paths such as `/` or `/robots.txt`. It also accepts full URLs under the configured target, such as `https://example.com/robots.txt`, and safely normalizes them to relative paths before sending anything over WebRTC. Returned HTML is sanitized before rendering: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the configured target site.
 
+Large responses are split into DataChannel-safe chunks and reassembled by the viewer. The proxy still enforces the `-MaxBody` cap, which defaults to 262144 bytes.
+
 For a one-machine browser UI check:
 
 ```powershell

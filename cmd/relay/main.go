@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 
 	"snowflakeprotocolpoc/internal/lab"
 )
+
+const responseChunkBytes = 24 * 1024
 
 func main() {
 	brokerURL := flag.String("broker", "http://127.0.0.1:8080", "signaling broker URL")
@@ -272,6 +275,14 @@ func errorResponse(id, message string) lab.RelayResponse {
 }
 
 func sendRelayResponse(d *webrtc.DataChannel, response lab.RelayResponse) {
+	if response.Body != "" {
+		body := []byte(response.Body)
+		if len(body) > responseChunkBytes {
+			sendRelayResponseChunks(d, response, body)
+			return
+		}
+	}
+
 	payload, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("marshal proxy response: %v", err)
@@ -279,5 +290,39 @@ func sendRelayResponse(d *webrtc.DataChannel, response lab.RelayResponse) {
 	}
 	if err := d.Send(payload); err != nil {
 		log.Printf("send proxy response: %v", err)
+	}
+}
+
+func sendRelayResponseChunks(d *webrtc.DataChannel, response lab.RelayResponse, body []byte) {
+	total := (len(body) + responseChunkBytes - 1) / responseChunkBytes
+	if total == 0 {
+		total = 1
+	}
+
+	log.Printf("sending proxy response id=%s in %d DataChannel chunks", response.ID, total)
+	for i := 0; i < total; i++ {
+		start := i * responseChunkBytes
+		end := start + responseChunkBytes
+		if end > len(body) {
+			end = len(body)
+		}
+
+		chunk := response
+		chunk.Type = lab.RelayResponseChunkType
+		chunk.Body = ""
+		chunk.BodyEncoding = "base64"
+		chunk.BodyChunk = base64.StdEncoding.EncodeToString(body[start:end])
+		chunk.ChunkIndex = i
+		chunk.ChunkTotal = total
+
+		payload, err := json.Marshal(chunk)
+		if err != nil {
+			log.Printf("marshal proxy response chunk id=%s chunk=%d/%d: %v", response.ID, i+1, total, err)
+			return
+		}
+		if err := d.Send(payload); err != nil {
+			log.Printf("send proxy response chunk id=%s chunk=%d/%d: %v", response.ID, i+1, total, err)
+			return
+		}
 	}
 }
