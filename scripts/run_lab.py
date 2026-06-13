@@ -133,6 +133,8 @@ def browserui_args(args: argparse.Namespace) -> list[str]:
         args.session,
         "-stun",
         stun_value(args),
+        "-target-url",
+        args.target_url,
     ]
 
 

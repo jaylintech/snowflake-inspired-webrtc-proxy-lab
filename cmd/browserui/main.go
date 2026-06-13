@@ -13,6 +13,7 @@ type pageData struct {
 	BrokerURL template.JS
 	Session   template.JS
 	Stun      template.JS
+	TargetURL template.JS
 }
 
 func main() {
@@ -20,6 +21,7 @@ func main() {
 	brokerURL := flag.String("broker", "http://127.0.0.1:8080", "signaling broker URL")
 	sessionID := flag.String("session", "browser-session", "shared signaling session id")
 	stunServers := flag.String("stun", "stun:stun.l.google.com:19302", "comma-separated STUN URLs; empty disables external STUN")
+	targetURL := flag.String("target-url", "", "configured proxy target URL hint for browser input normalization")
 	flag.Parse()
 
 	tmpl := template.Must(template.New("browserui").Parse(browserPage))
@@ -27,6 +29,7 @@ func main() {
 		BrokerURL: jsString(*brokerURL),
 		Session:   jsString(*sessionID),
 		Stun:      jsString(*stunServers),
+		TargetURL: jsString(*targetURL),
 	}
 
 	mux := http.NewServeMux()
@@ -46,6 +49,9 @@ func main() {
 
 	log.Printf("browser UI listening on %s", displayURL(*listen))
 	log.Printf("open the UI locally and connect to broker %s with session %q", *brokerURL, *sessionID)
+	if strings.TrimSpace(*targetURL) != "" {
+		log.Printf("browser UI target hint: %s", *targetURL)
+	}
 	if err := http.ListenAndServe(*listen, mux); err != nil {
 		log.Fatal(err)
 	}
@@ -130,7 +136,7 @@ const browserPage = `<!doctype html>
     .status.bad { color: var(--bad); border-color: #f1aeb5; background: #fff1f3; }
     .controls {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(150px, 220px) minmax(180px, 260px) auto;
+      grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(140px, 180px) minmax(160px, 240px) auto;
       gap: 10px;
       padding: 12px 18px;
       border-bottom: 1px solid var(--line);
@@ -264,6 +270,9 @@ const browserPage = `<!doctype html>
       <label>Broker URL
         <input id="broker" autocomplete="off">
       </label>
+      <label>Target URL hint
+        <input id="target" autocomplete="off">
+      </label>
       <label>Session
         <input id="session" autocomplete="off">
       </label>
@@ -279,11 +288,11 @@ const browserPage = `<!doctype html>
     <main>
       <section class="viewer-shell" aria-label="Proxy viewer">
         <div class="nav">
-          <input id="path" value="/" autocomplete="off" aria-label="Relative path">
+          <input id="path" value="/" autocomplete="off" aria-label="Target path or URL">
           <button id="go" disabled>Go</button>
         </div>
         <div id="viewer">
-          <p class="empty">Connect to the proxy session, then request a relative path such as <code>/</code> or <code>/robots.txt</code>. Returned HTML is sanitized before rendering so scripts, forms, and external assets do not load directly from this device.</p>
+          <p class="empty">Connect to the proxy session, then request <code>/</code>, <code>/robots.txt</code>, or a URL under the configured target such as <code>https://example.com/robots.txt</code>. Returned HTML is sanitized before rendering so scripts, forms, and external assets do not load directly from this device.</p>
         </div>
       </section>
       <aside aria-label="Connection log">
@@ -299,11 +308,13 @@ const browserPage = `<!doctype html>
     const config = {
       brokerUrl: {{ .BrokerURL }},
       session: {{ .Session }},
-      stun: {{ .Stun }}
+      stun: {{ .Stun }},
+      targetUrl: {{ .TargetURL }}
     };
     const requestType = "LAB_PROXY_REQUEST";
 
     const brokerInput = document.getElementById("broker");
+    const targetInput = document.getElementById("target");
     const sessionInput = document.getElementById("session");
     const stunInput = document.getElementById("stun");
     const pathInput = document.getElementById("path");
@@ -320,6 +331,7 @@ const browserPage = `<!doctype html>
     let shadow = null;
 
     brokerInput.value = config.brokerUrl;
+    targetInput.value = config.targetUrl;
     sessionInput.value = config.session;
     stunInput.value = config.stun;
 
@@ -520,14 +532,78 @@ const browserPage = `<!doctype html>
       if (!path) {
         return "/";
       }
-      if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("//")) {
-        logLine("blocked absolute URL; enter a relative path under the configured target");
-        return "";
+
+      const target = targetBaseURL();
+      const inputURL = parseURLInput(path, target);
+      if (inputURL) {
+        if (!target) {
+          logLine("set the target URL hint before entering a full URL");
+          return "";
+        }
+        if (inputURL.origin !== target.origin) {
+          logLine("blocked " + inputURL.origin + "; proxy session is bounded to " + target.origin);
+          return "";
+        }
+
+        const normalized = inputURL.pathname + inputURL.search;
+        logLine("normalized " + path + " to " + (normalized || "/"));
+        return normalized || "/";
       }
+
       if (!path.startsWith("/")) {
         path = "/" + path;
       }
       return path;
+    }
+
+    function targetBaseURL() {
+      const raw = targetInput.value.trim();
+      if (!raw) {
+        return null;
+      }
+
+      try {
+        return new URL(raw.indexOf("://") === -1 ? "https://" + raw : raw);
+      } catch (error) {
+        logLine("target URL hint is invalid: " + raw);
+        return null;
+      }
+    }
+
+    function parseURLInput(value, target) {
+      if (value.startsWith("http://") || value.startsWith("https://")) {
+        try {
+          return new URL(value);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      if (value.startsWith("//")) {
+        if (!target) {
+          return null;
+        }
+        try {
+          return new URL(target.protocol + value);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      if (looksLikeHostPath(value)) {
+        try {
+          return new URL("https://" + value);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      return null;
+    }
+
+    function looksLikeHostPath(value) {
+      const hostPart = value.split(/[/?#]/, 1)[0].toLowerCase();
+      return hostPart === "localhost" || hostPart.indexOf(".") !== -1 || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostPart);
     }
 
     function handleProxyResponse(raw) {

@@ -165,7 +165,8 @@ function Invoke-BrowserUI {
     $args = @(
         "-listen", $UiListen,
         "-broker", $BrokerUrl,
-        "-session", $Session
+        "-session", $Session,
+        "-target-url", $TargetUrl
     )
     $args += Get-StunNativeArgs
     Invoke-GoOrBinary -CommandName "browserui" -CommandArgs $args

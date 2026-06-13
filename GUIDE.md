@@ -203,7 +203,7 @@ Replace `https://example.com` with a site or server you own or are explicitly au
 Start the local UI on the monitored test client:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -UiListen 127.0.0.1:7777
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -TargetUrl https://example.com -UiListen 127.0.0.1:7777
 ```
 
 Open this URL locally on the monitored test client:
@@ -219,6 +219,16 @@ Click `Connect`. When the DataChannel opens, the viewer automatically requests `
 /robots.txt
 /article-proof?via=browserui
 ```
+
+You can also enter a full URL under the configured target, such as:
+
+```text
+https://example.com/
+https://example.com/robots.txt
+example.com/robots.txt
+```
+
+The viewer converts those to relative paths before sending the request over WebRTC. A different hostname is blocked in the UI because the proxy session is bounded to the configured target.
 
 Expected browser UI logs:
 

@@ -111,7 +111,7 @@ Device A, proxy-server side:
 Device B, monitored client side:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -UiListen 127.0.0.1:7777
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -TargetUrl https://example.com -UiListen 127.0.0.1:7777
 ```
 
 Then open:
@@ -120,7 +120,7 @@ Then open:
 http://127.0.0.1:7777
 ```
 
-The viewer accepts relative paths such as `/` or `/robots.txt`. Returned HTML is sanitized before rendering: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the configured target site.
+The viewer accepts relative paths such as `/` or `/robots.txt`. It also accepts full URLs under the configured target, such as `https://example.com/robots.txt`, and safely normalizes them to relative paths before sending anything over WebRTC. Returned HTML is sanitized before rendering: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the configured target site.
 
 For a one-machine browser UI check:
 
