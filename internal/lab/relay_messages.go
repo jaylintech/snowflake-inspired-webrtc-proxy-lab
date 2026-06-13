@@ -19,7 +19,10 @@ type RelayResponse struct {
 	Status      int    `json:"status"`
 	Target      string `json:"target"`
 	Bytes       int    `json:"bytes"`
+	ContentType string `json:"content_type,omitempty"`
+	Body        string `json:"body,omitempty"`
 	BodyPreview string `json:"body_preview,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
 	Error       string `json:"error,omitempty"`
 	Time        string `json:"time"`
 }

@@ -99,6 +99,8 @@ def relay_args(args: argparse.Namespace) -> list[str]:
         stun_value(args),
         "-target",
         args.target_url,
+        "-max-body",
+        str(args.max_body),
     ]
 
 
@@ -118,6 +120,19 @@ def webclient_args(args: argparse.Namespace) -> list[str]:
         args.body,
         "-interval",
         args.interval,
+    ]
+
+
+def browserui_args(args: argparse.Namespace) -> list[str]:
+    return [
+        "-listen",
+        args.ui_listen,
+        "-broker",
+        args.broker_url,
+        "-session",
+        args.session,
+        "-stun",
+        stun_value(args),
     ]
 
 
@@ -148,6 +163,10 @@ def run_relay(args: argparse.Namespace) -> int:
 
 def run_webclient(args: argparse.Namespace) -> int:
     return run_foreground(role_command("webclient", webclient_args(args)))
+
+
+def run_browserui(args: argparse.Namespace) -> int:
+    return run_foreground(role_command("browserui", browserui_args(args)))
 
 
 def run_local(args: argparse.Namespace) -> int:
@@ -215,6 +234,40 @@ def run_relay_local(args: argparse.Namespace) -> int:
         stop_processes(processes)
 
 
+def run_browser_local(args: argparse.Namespace) -> int:
+    print(f"Starting bounded WebRTC browser viewer lab session '{args.session}'")
+    print(f"The proxy server only connects to the configured target URL: {args.target_url}")
+
+    processes: list[subprocess.Popen[bytes]] = []
+    try:
+        processes.append(
+            subprocess.Popen(role_command("broker", broker_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        processes.append(
+            subprocess.Popen(role_command("target", target_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        processes.append(
+            subprocess.Popen(role_command("relay", relay_args(args)), cwd=REPO_ROOT)
+        )
+        time.sleep(1)
+        processes.append(
+            subprocess.Popen(role_command("browserui", browserui_args(args)), cwd=REPO_ROOT)
+        )
+        print(f"Open http://{args.ui_listen} in a browser on this machine.")
+        while True:
+            exited = [p for p in processes if p.poll() is not None]
+            if exited:
+                return exited[0].returncode or 0
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping browser viewer lab processes...")
+        return 130
+    finally:
+        stop_processes(processes)
+
+
 def stop_processes(processes: list[subprocess.Popen[bytes]]) -> None:
     for process in reversed(processes):
         if process.poll() is None:
@@ -266,8 +319,10 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--listen", default=":8080")
     parser.add_argument("--target-listen", default=":9090")
     parser.add_argument("--target-url", default="http://127.0.0.1:9090")
+    parser.add_argument("--ui-listen", default="127.0.0.1:7777")
     parser.add_argument("--stun", default=DEFAULT_STUN)
     parser.add_argument("--no-stun", action="store_true")
+    parser.add_argument("--max-body", type=int, default=262144)
     parser.add_argument("--interval", default="8s")
     parser.add_argument("--jitter", type=int, default=35)
     parser.add_argument("--count", type=int, default=8)
@@ -295,6 +350,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "local": run_local,
         "relay-local": run_relay_local,
         "proxy-local": run_relay_local,
+        "browser-local": run_browser_local,
         "broker": run_broker,
         "target": run_target,
         "listener": run_listener,
@@ -302,13 +358,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "relay": run_relay,
         "proxy": run_relay,
         "webclient": run_webclient,
+        "browserui": run_browserui,
         "build": run_build,
         "test": run_test,
     }
 
     for name, func in commands.items():
         subparser = subparsers.add_parser(name)
-        if name in {"local", "relay-local", "proxy-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient"}:
+        if name in {"local", "relay-local", "proxy-local", "browser-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "browserui"}:
             add_common_args(subparser)
         subparser.set_defaults(func=func)
 

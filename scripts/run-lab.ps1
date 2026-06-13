@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("local", "relay-local", "proxy-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "build", "test")]
+    [ValidateSet("local", "relay-local", "proxy-local", "browser-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "browserui", "build", "test")]
     [string]$Role = "local",
 
     [string]$Session = "lab-demo",
@@ -7,8 +7,10 @@ param(
     [string]$Listen = ":8080",
     [string]$TargetListen = ":9090",
     [string]$TargetUrl = "http://127.0.0.1:9090",
+    [string]$UiListen = "127.0.0.1:7777",
     [string]$Stun = "stun:stun.l.google.com:19302",
     [switch]$NoStun,
+    [int]$MaxBody = 262144,
 
     [string]$Interval = "8s",
     [int]$Jitter = 35,
@@ -70,7 +72,7 @@ function Get-GoCommand {
 function Invoke-GoOrBinary {
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet("broker", "listener", "client", "target", "relay", "webclient")]
+        [ValidateSet("broker", "listener", "client", "target", "relay", "webclient", "browserui")]
         [string]$CommandName,
 
         [string[]]$CommandArgs
@@ -139,7 +141,8 @@ function Invoke-Relay {
     $args = @(
         "-broker", $BrokerUrl,
         "-session", $Session,
-        "-target", $TargetUrl
+        "-target", $TargetUrl,
+        "-max-body", "$MaxBody"
     )
     $args += Get-StunNativeArgs
     Invoke-GoOrBinary -CommandName "relay" -CommandArgs $args
@@ -158,6 +161,16 @@ function Invoke-WebClient {
     Invoke-GoOrBinary -CommandName "webclient" -CommandArgs $args
 }
 
+function Invoke-BrowserUI {
+    $args = @(
+        "-listen", $UiListen,
+        "-broker", $BrokerUrl,
+        "-session", $Session
+    )
+    $args += Get-StunNativeArgs
+    Invoke-GoOrBinary -CommandName "browserui" -CommandArgs $args
+}
+
 function Start-LabWindow {
     param(
         [string]$Title,
@@ -174,6 +187,7 @@ function Start-LabWindow {
         "-Listen", $Listen,
         "-TargetListen", $TargetListen,
         "-TargetUrl", $TargetUrl,
+        "-UiListen", $UiListen,
         "-Interval", $Interval,
         "-Jitter", "$Jitter",
         "-Count", "$Count",
@@ -186,7 +200,8 @@ function Start-LabWindow {
         "-ChunkDelay", $ChunkDelay,
         "-Paths", $Paths,
         "-Method", $Method,
-        "-Body", $Body
+        "-Body", $Body,
+        "-MaxBody", "$MaxBody"
     )
 
     if ($NoStun) {
@@ -230,6 +245,23 @@ function Invoke-RelayLocalLab {
     Write-Host "Watch for proxy request/response logs and target hit logs."
 }
 
+function Invoke-BrowserLocalLab {
+    Write-Host "Starting bounded WebRTC browser viewer lab session '$Session'"
+    Write-Host "The proxy server only connects to the configured target URL: $TargetUrl"
+
+    Start-LabWindow -Title "broker" -WindowRole "broker"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "target" -WindowRole "target"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "proxy" -WindowRole "proxy"
+    Start-Sleep -Seconds 1
+    Start-LabWindow -Title "browserui" -WindowRole "browserui"
+
+    Write-Host ""
+    Write-Host "Open http://$UiListen in a browser on this machine."
+    Write-Host "Watch for DataChannel logs, proxy request logs, and target hit logs."
+}
+
 function Invoke-Build {
     $repoRoot = Get-RepoRoot
     Push-Location $repoRoot
@@ -269,6 +301,7 @@ switch ($Role) {
     "local" { Invoke-LocalLab }
     "relay-local" { Invoke-RelayLocalLab }
     "proxy-local" { Invoke-RelayLocalLab }
+    "browser-local" { Invoke-BrowserLocalLab }
     "broker" { Invoke-Broker }
     "listener" { Invoke-Listener }
     "client" { Invoke-Client }
@@ -276,6 +309,7 @@ switch ($Role) {
     "relay" { Invoke-Relay }
     "proxy" { Invoke-Relay }
     "webclient" { Invoke-WebClient }
+    "browserui" { Invoke-BrowserUI }
     "build" { Invoke-Build }
     "test" { Invoke-Test }
 }

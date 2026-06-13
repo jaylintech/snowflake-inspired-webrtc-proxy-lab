@@ -19,6 +19,7 @@ Roles:
 - `cmd/broker`: HTTP signaling service that exchanges SDP offers and answers.
 - `cmd/relay`: bounded WebRTC proxy server. It accepts DataChannel requests and forwards them only to one configured target URL.
 - `cmd/webclient`: test client that sends synthetic HTTP requests through the WebRTC proxy server.
+- `cmd/browserui`: local browser-like viewer. It uses the browser's native WebRTC DataChannel support and renders sanitized proxy responses.
 - `cmd/target`: controlled HTTP target server that logs proof of proxied access.
 
 The `relay` name remains in the code because the implementation is a WebRTC relay internally. User-facing docs and scripts also expose `proxy` and `proxy-local` aliases.
@@ -89,6 +90,43 @@ Success indicators:
 - Proxy server logs `proxy request id=... target=http://127.0.0.1:9090/...`.
 - Target logs `target hit`.
 - Webclient logs `proxy response id=... status=200`.
+
+## Browser-Like Viewer
+
+The `browserui` role serves a local page that uses the browser's native WebRTC implementation instead of the Go `webclient`. It is still the same bounded proxy path:
+
+```text
+local browser UI -> broker for signaling
+local browser UI == WebRTC DataChannel ==> proxy server
+proxy server -> configured target website/server
+```
+
+Device A, proxy-server side:
+
+```powershell
+.\scripts\run-lab.ps1 -Role broker -Listen :8080
+.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session browser-test -TargetUrl https://example.com
+```
+
+Device B, monitored client side:
+
+```powershell
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -UiListen 127.0.0.1:7777
+```
+
+Then open:
+
+```text
+http://127.0.0.1:7777
+```
+
+The viewer accepts relative paths such as `/` or `/robots.txt`. Returned HTML is sanitized before rendering: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the configured target site.
+
+For a one-machine browser UI check:
+
+```powershell
+.\scripts\run-lab.ps1 -Role browser-local -Session browser-local -TargetUrl http://127.0.0.1:9090 -NoStun
+```
 
 ## Split Proxy Test
 

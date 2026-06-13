@@ -25,6 +25,7 @@ The client-side firewall can still see broker traffic and WebRTC/UDP to the prox
 - `broker`: HTTP signaling broker for SDP offer/answer exchange.
 - `proxy`: WebRTC proxy server role. It maps to the `cmd/relay` implementation.
 - `webclient`: test client that sends synthetic HTTP requests over the DataChannel.
+- `browserui`: local browser-like viewer that creates a WebRTC DataChannel from the browser.
 - `target`: controlled HTTP server that logs proxied requests.
 
 The older `listener` and `client` roles are still present for direct beacon testing, but they are not the main proxy experiment.
@@ -168,6 +169,76 @@ target hit: method=GET path=/article-proof?via=webrtc request_id=proxy-003
 ```
 
 If those logs appear, the proxy path is working.
+
+## Browser-Like Viewer Verification
+
+The browser viewer is useful when you want something closer to browsing while still keeping the same Snowflake-inspired WebRTC proxy path. It is not a full browser isolation product. It renders sanitized HTML only, and it disables scripts, forms, external assets, and cross-site links so the monitored test client does not directly load the target site's resources.
+
+Expected path:
+
+```text
+[Monitored Test Client Browser] -- HTTP signaling --> [Broker]
+[Monitored Test Client Browser] == WebRTC DataChannel ==> [Proxy Server]
+[Proxy Server] -- HTTP/HTTPS --> [Configured Target Site]
+```
+
+### Browser Viewer: Proxy-Server Side
+
+Open one PowerShell window for the broker:
+
+```powershell
+.\scripts\run-lab.ps1 -Role broker -Listen :8080
+```
+
+Open another PowerShell window for the proxy server:
+
+```powershell
+.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session browser-test -TargetUrl https://example.com
+```
+
+Replace `https://example.com` with a site or server you own or are explicitly authorized to test.
+
+### Browser Viewer: Monitored Client Side
+
+Start the local UI on the monitored test client:
+
+```powershell
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -UiListen 127.0.0.1:7777
+```
+
+Open this URL locally on the monitored test client:
+
+```text
+http://127.0.0.1:7777
+```
+
+Click `Connect`. When the DataChannel opens, the viewer automatically requests `/`. You can then enter relative paths such as:
+
+```text
+/
+/robots.txt
+/article-proof?via=browserui
+```
+
+Expected browser UI logs:
+
+```text
+posted SDP offer to broker
+applied SDP answer from proxy
+proxy data channel "lab-proxy" open
+sent proxy request id=browser-001 path=/
+proxy response id=browser-001 status=200
+```
+
+Expected proxy-server logs:
+
+```text
+proxy data channel "lab-proxy" created by client
+proxy data channel "lab-proxy" open
+proxy request id=browser-001 method=GET target=https://example.com/
+```
+
+For DNS-filter testing, the monitored test client should resolve and connect to the broker/proxy infrastructure, not the configured target site. The configured target site should see the proxy-server host as the requester.
 
 ## What To Observe
 

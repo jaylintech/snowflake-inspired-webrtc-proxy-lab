@@ -25,6 +25,8 @@ The connection flow has three phases:
 2. ICE/STUN negotiation: the webclient and proxy server discover whether a WebRTC path can be established.
 3. Proxy exchange: the webclient sends bounded request messages through the encrypted DataChannel, and the proxy server forwards them to the controlled target.
 
+The project also includes a browser-like viewer. In that mode, a local page on the monitored client creates the WebRTC DataChannel from the browser itself, sends relative-path requests to the proxy server, and renders sanitized HTML responses. It is intentionally not a full browser proxy: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the target site's resources.
+
 ## Why This Matters
 
 A direct WebRTC client still connects to the final server IP. A proxy model changes the observation point:

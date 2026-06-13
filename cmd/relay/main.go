@@ -26,7 +26,7 @@ func main() {
 	sessionID := flag.String("session", "proxy-session", "shared signaling session id")
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
 	target := flag.String("target", "http://127.0.0.1:9090", "single controlled target base URL for the bounded proxy server")
-	maxBody := flag.Int64("max-body", 4096, "maximum response body bytes returned to the client")
+	maxBody := flag.Int64("max-body", 262144, "maximum response body bytes returned to the client")
 	requestTimeout := flag.Duration("request-timeout", 10*time.Second, "target request timeout")
 	pollInterval := flag.Duration("poll", time.Second, "broker polling interval")
 	timeout := flag.Duration("timeout", 5*time.Minute, "maximum time to wait for signaling")
@@ -201,10 +201,7 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		bodyBytes = bodyBytes[:limit]
 	}
 
-	preview := string(bodyBytes)
-	if truncated {
-		preview += "...[truncated]"
-	}
+	preview := responsePreview(bodyBytes, truncated)
 
 	sendRelayResponse(d, lab.RelayResponse{
 		Type:        lab.RelayResponseType,
@@ -212,9 +209,30 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		Status:      resp.StatusCode,
 		Target:      requestURL,
 		Bytes:       len(bodyBytes),
+		ContentType: resp.Header.Get("Content-Type"),
+		Body:        string(bodyBytes),
 		BodyPreview: preview,
+		Truncated:   truncated,
 		Time:        time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+func responsePreview(body []byte, bodyTruncated bool) string {
+	const previewLimit = 512
+
+	preview := body
+	if len(preview) > previewLimit {
+		preview = preview[:previewLimit]
+	}
+
+	out := string(preview)
+	if len(body) > previewLimit {
+		out += "...[preview truncated]"
+	}
+	if bodyTruncated {
+		out += "...[body truncated]"
+	}
+	return out
 }
 
 func boundedTargetURL(target *url.URL, requestPath string) (string, error) {
