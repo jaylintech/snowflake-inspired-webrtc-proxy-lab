@@ -25,7 +25,7 @@ type RelayResponse struct {
 	Body         string `json:"body,omitempty"`
 	BodyChunk    string `json:"body_chunk,omitempty"`
 	BodyPreview  string `json:"body_preview,omitempty"`
-	ChunkIndex   int    `json:"chunk_index,omitempty"`
+	ChunkIndex   int    `json:"chunk_index"`
 	ChunkTotal   int    `json:"chunk_total,omitempty"`
 	Truncated    bool   `json:"truncated,omitempty"`
 	Error        string `json:"error,omitempty"`
