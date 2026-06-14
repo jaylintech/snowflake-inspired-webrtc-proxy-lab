@@ -2,7 +2,7 @@
 
 This repository contains a controlled WebRTC proxy proof of concept for defensive testing. It evaluates whether a test client can reach an owned website or server through a WebRTC DataChannel proxy server instead of connecting to that site directly.
 
-For a step-by-step walkthrough, see [GUIDE.md](GUIDE.md).
+For a step-by-step walkthrough, see [GUIDE.md](GUIDE.md). For observed DNS-filter behavior and an off-LAN test plan, see [FINDINGS.md](FINDINGS.md).
 
 ## Architecture
 
