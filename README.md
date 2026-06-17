@@ -1,43 +1,40 @@
 # Snowflake-Inspired WebRTC Proxy Lab
 
-This repository contains a controlled WebRTC proxy proof of concept for defensive testing. It evaluates whether a test client can reach an owned website or server through a WebRTC DataChannel proxy server instead of connecting to that site directly.
+Controlled proof of concept for testing how DNS filters, content filters, firewalls, and monitoring tools observe a bounded WebRTC proxy path.
 
-For a step-by-step walkthrough, see [GUIDE.md](GUIDE.md). For observed DNS-filter behavior and an off-LAN test plan, see [FINDINGS.md](FINDINGS.md).
-
-## Architecture
-
-Primary proxy mode:
+The lab compares direct client access to a destination with access through a WebRTC DataChannel proxy host:
 
 ```text
 [Test Client] -- HTTP signaling --> [Broker]
 [Test Client] == WebRTC DataChannel ==> [Proxy Server]
-[Proxy Server] -- HTTP/HTTPS --> [Controlled Website/Server]
+[Proxy Server] -- HTTP/HTTPS --> [Controlled Target]
 ```
 
-Roles:
+Additional documentation:
 
-- `cmd/broker`: HTTP signaling service that exchanges SDP offers and answers.
-- `cmd/relay`: bounded WebRTC proxy server. It accepts DataChannel requests and forwards them only to one configured target URL.
-- `cmd/webclient`: test client that sends synthetic HTTP requests through the WebRTC proxy server.
-- `cmd/browserui`: local browser-like viewer. It uses the browser's native WebRTC DataChannel support and renders sanitized proxy responses.
-- `cmd/target`: controlled HTTP target server that logs proof of proxied access.
+- [GUIDE.md](GUIDE.md): runbook and verification steps
+- [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
+- [ARTICLE.md](ARTICLE.md): concise write-up draft
 
-The `relay` name remains in the code because the implementation is a WebRTC relay internally. User-facing docs and scripts also expose `proxy` and `proxy-local` aliases.
+## Scope
 
-## Safety Boundary
+This project is a defensive network-behavior lab. It is intentionally bounded:
 
-The proxy server is intentionally bounded. It is not an open proxy.
+- The proxy connects only to the configured `-TargetUrl`.
+- Clients send relative-path requests under that target.
+- Proxy mode allows only `GET` and `POST`.
+- Targets must be owned or explicitly authorized for testing.
+- The project does not implement command execution, persistence, credential access, file collection, process hiding, or an open proxy.
 
-- The proxy server only connects to the configured `-target` base URL.
-- The WebRTC client can request only relative paths, not arbitrary URLs.
-- Only `GET` and `POST` are allowed in proxy mode.
-- The target website/server must be one you own or are explicitly authorized to test.
+## Components
 
-This PoC does not execute commands, collect files, install persistence, steal credentials, hide processes, or bypass host controls. It tests network behavior and security-filter visibility.
+- `cmd/broker`: HTTP SDP offer/answer signaling service.
+- `cmd/relay`: bounded WebRTC proxy implementation. User-facing scripts expose it as `proxy`.
+- `cmd/webclient`: CLI client that sends synthetic requests over the DataChannel.
+- `cmd/browserui`: local browser-based viewer that creates the WebRTC DataChannel from the browser and renders sanitized responses.
+- `cmd/target`: controlled HTTP target for local verification.
 
 ## Build
-
-Install Go 1.22 or newer, then build from the repository root.
 
 Windows:
 
@@ -51,18 +48,17 @@ Linux:
 python3 scripts/run_lab.py build
 ```
 
-Manual build:
+Manual:
 
 ```bash
-mkdir -p bin
 go mod tidy
 go test ./...
 go build -o bin ./cmd/...
 ```
 
-## Quick Local Proxy Test
+## Quick Local Test
 
-Use this only to prove the code works. It runs everything on one machine.
+Runs broker, target, proxy, and client on one machine.
 
 Windows:
 
@@ -76,126 +72,78 @@ Linux:
 python3 scripts/run_lab.py proxy-local --session proxy-local --no-stun
 ```
 
-The local test starts:
-
-1. broker on `:8080`
-2. controlled target on `:9090`
-3. WebRTC proxy server pointed at `http://127.0.0.1:9090`
-4. WebRTC client sending synthetic requests through the proxy server
-
 Success indicators:
 
 - Broker logs `stored offer` and `stored answer`.
-- Proxy server logs `proxy data channel "lab-proxy" open`.
-- Proxy server logs `proxy request id=... target=http://127.0.0.1:9090/...`.
+- Proxy logs `proxy data channel "lab-proxy" open`.
+- Proxy logs `proxy request id=... target=...`.
 - Target logs `target hit`.
-- Webclient logs `proxy response id=... status=200`.
+- Client logs `proxy response id=... status=200`.
 
-## Browser-Like Viewer
+## Browser Viewer
 
-The `browserui` role serves a local page that uses the browser's native WebRTC implementation instead of the Go `webclient`. It is still the same bounded proxy path:
+The browser viewer provides a lightweight "browser within a browser" experience while keeping the same bounded proxy path. It renders sanitized HTML only; scripts, forms, external assets, and cross-site links are disabled so the client does not directly load target-site resources.
 
-```text
-local browser UI -> broker for signaling
-local browser UI == WebRTC DataChannel ==> proxy server
-proxy server -> configured target website/server
-```
-
-Device A, proxy-server side:
+Proxy-server side:
 
 ```powershell
 .\scripts\run-lab.ps1 -Role broker -Listen :8080
-.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session browser-test -TargetUrl https://example.com
-```
-
-Device B, monitored client side:
-
-```powershell
-.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -TargetUrl https://example.com -UiListen 127.0.0.1:7777
-```
-
-Then open:
-
-```text
-http://127.0.0.1:7777
-```
-
-The viewer accepts relative paths such as `/` or `/robots.txt`. It also accepts full URLs under the configured target, such as `https://example.com/robots.txt`, and safely normalizes them to relative paths before sending anything over WebRTC. Returned HTML is sanitized before rendering: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the configured target site.
-
-Large responses are split into DataChannel-safe chunks and reassembled by the viewer. The proxy still enforces the `-MaxBody` cap, which defaults to 262144 bytes.
-
-For a one-machine browser UI check:
-
-```powershell
-.\scripts\run-lab.ps1 -Role browser-local -Session browser-local -TargetUrl http://127.0.0.1:9090 -NoStun
-```
-
-## Split Proxy Test
-
-Use this for the meaningful content-filter/security-filter test.
-
-Server side:
-
-```powershell
-.\scripts\run-lab.ps1 -Role broker -Listen :8080
-.\scripts\run-lab.ps1 -Role target -TargetListen 127.0.0.1:9090
-.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session proxy-split -TargetUrl http://127.0.0.1:9090
+.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session browser-test -TargetUrl https://example.com -MaxBody 1048576
 ```
 
 Client side:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role webclient -BrokerUrl http://SERVER_IP:8080 -Session proxy-split -Paths "/,/healthz,/article-proof?via=webrtc"
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session browser-test -TargetUrl https://example.com -UiListen 127.0.0.1:7777
 ```
 
-Expected flow:
+Open on the client:
 
 ```text
-client/webclient -> broker over HTTP
-client/webclient -> proxy server over WebRTC
-proxy server -> controlled website/server over HTTP
+http://127.0.0.1:7777
 ```
 
-The monitored client should not connect directly to the controlled target. It should connect to the broker for signaling and to the proxy server over WebRTC. The proxy server then connects to the target site.
+The viewer accepts `/`, `/robots.txt`, or full URLs under the configured target such as `https://example.com/robots.txt`. Large responses are sent in DataChannel-safe chunks and reassembled by the client. The proxy still enforces `-MaxBody`.
 
-## STUN And Network Reality
+## Split Test
 
-You do not always need an external STUN server.
+Use this for content-filter and DNS-filter experiments.
 
-- Same host: no external STUN is needed. Use `-NoStun` or `--no-stun`.
-- Same LAN with direct UDP allowed: external STUN is often not needed.
-- NAT to NAT across networks: STUN is usually needed so each peer can discover public-facing candidates.
-- Strict enterprise networks: public STUN may be blocked, and arbitrary peer UDP may also be blocked.
-
-If HTTP signaling succeeds but ICE/WebRTC never connects, that is still a useful defensive result: the environment allowed rendezvous but blocked the WebRTC proxy channel at NAT traversal or UDP policy.
-
-TURN is the normal WebRTC fallback when direct peer-to-peer connectivity fails. This PoC does not bundle TURN because direct WebRTC behavior is easier to observe and reason about.
-
-## Direct Beacon Comparison
-
-The older direct beacon emulator is still available for comparison:
-
-Windows:
+Proxy-server side:
 
 ```powershell
-.\scripts\run-lab.ps1 -Role local
+.\scripts\run-lab.ps1 -Role broker -Listen :8080
+.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session split-test -TargetUrl https://controlled-target.example -MaxBody 1048576
 ```
 
-Linux:
+Client side:
 
-```bash
-python3 scripts/run_lab.py local
+```powershell
+.\scripts\run-lab.ps1 -Role browserui -BrokerUrl http://SERVER_IP:8080 -Session split-test -TargetUrl https://controlled-target.example -UiListen 127.0.0.1:7777
 ```
 
-That mode connects a client directly to a listener over WebRTC and emits beacon/task messages. Use proxy mode for Snowflake-inspired content-filter testing.
+Expected observation:
 
-## Defensive Analysis Notes
+- Client sees broker/proxy signaling and WebRTC traffic.
+- Proxy host resolves and connects to the configured target.
+- Target sees the proxy host as the requester.
+- Client-side DNS logs should not show the configured target if the client never resolves it directly.
 
-For proxy mode, compare what each control plane observes:
+## Network Notes
 
-- Client DNS/content filter: should see broker/proxy infrastructure, not the controlled target URL directly.
-- Firewall: should see HTTP signaling and WebRTC/UDP to the proxy server.
-- Target server: should see requests coming from the proxy server host, not the client.
-- EDR/NDR: may detect unusual DataChannel use, STUN traffic, long-lived UDP, or unexpected process behavior.
+- Same host or same LAN: `-NoStun` may be sufficient.
+- NAT-to-NAT paths usually require STUN.
+- Strict networks may block public STUN or peer UDP.
+- If signaling succeeds but ICE never connects, UDP/NAT traversal is the likely failure point.
+- TURN is the normal fallback for WebRTC paths where direct UDP cannot connect; this PoC does not bundle TURN.
 
-This PoC should be run only in systems you own or have explicit permission to test.
+## Defensive Analysis
+
+Compare these views during a test:
+
+- Client DNS/content filter: broker/proxy infrastructure vs. final target domain.
+- Firewall/NDR: HTTP signaling, STUN, and WebRTC/UDP flows.
+- Target logs: proxy host IP vs. client IP.
+- Endpoint tools: unusual standalone WebRTC/DataChannel process behavior.
+
+Use only in owned or explicitly authorized environments.

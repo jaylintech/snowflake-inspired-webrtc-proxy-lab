@@ -1,90 +1,82 @@
-# Testing WebRTC Proxy Traffic Against Content Filtering
+# Testing WebRTC Proxy Traffic Against DNS And Content Filtering
 
-WebRTC is usually discussed in the context of browsers, voice, video, and collaboration tools. The same peer-to-peer transport pattern can also be used as a proxy layer: a client establishes a WebRTC DataChannel to an intermediate proxy server, and that proxy server reaches a final website or server on the client's behalf.
+This project tests a bounded proxy pattern built on WebRTC DataChannels. A monitored client connects to a broker for SDP signaling, establishes a WebRTC channel to a proxy host, and asks that proxy host to fetch a configured target site.
 
-This article describes a bounded, defensive proof of concept that tests that network pattern. The goal is to evaluate what content filters, firewalls, and monitoring tools see when a client reaches an owned destination site through a Snowflake-inspired WebRTC proxy server instead of connecting to the destination directly.
+The goal is not to build an open proxy. The goal is to measure what different controls observe when the final destination is reached by the proxy host instead of by the monitored client.
 
 ## Research Question
 
-Can a monitored network identify or block access to a controlled destination when the test client sends the request through a WebRTC proxy server?
+```text
+Can client-side DNS or content filtering identify and block a destination when the monitored client never resolves that destination and instead requests it through a WebRTC proxy host?
+```
 
-The PoC is intentionally scoped to answer that question. It does not implement command execution, persistence, credential access, process hiding, filesystem collection, or an unrestricted proxy. The proxy server is configured with one allowed target URL, and the client can request only relative paths under that target.
-
-## Lab Architecture
-
-The proxy path has four components:
-
-- `broker`: an explicit HTTP signaling broker that exchanges SDP offers and answers.
-- `proxy`: a WebRTC proxy server that receives bounded DataChannel requests and forwards them to a configured target URL.
-- `webclient`: a test client that sends synthetic HTTP requests through the DataChannel.
-- `target`: a controlled HTTP server that logs proof of proxied requests.
-
-The connection flow has three phases:
-
-1. Signaling: the webclient posts an SDP offer to the broker, and the proxy server posts an SDP answer.
-2. ICE/STUN negotiation: the webclient and proxy server discover whether a WebRTC path can be established.
-3. Proxy exchange: the webclient sends bounded request messages through the encrypted DataChannel, and the proxy server forwards them to the controlled target.
-
-The project also includes a browser-like viewer. In that mode, a local page on the monitored client creates the WebRTC DataChannel from the browser itself, sends relative-path requests to the proxy server, and renders sanitized HTML responses. It is intentionally not a full browser proxy: scripts, forms, external assets, and cross-site links are disabled so the monitored client does not directly browse the target site's resources.
-
-## Why This Matters
-
-A direct WebRTC client still connects to the final server IP. A proxy model changes the observation point:
+## Architecture
 
 ```text
-client == WebRTC DataChannel ==> proxy server --> controlled target
+[Monitored Client] -- HTTP signaling --> [Broker]
+[Monitored Client] == WebRTC DataChannel ==> [Proxy Host]
+[Proxy Host] -- HTTP/HTTPS --> [Configured Target]
 ```
 
-The client-side network sees signaling and WebRTC traffic to the proxy server. The controlled target sees traffic from the proxy server. That distinction is the Snowflake-inspired part: indirection, not invisibility.
+Components:
 
-## Expected Observations
-
-On the monitored client network, defenders should look for:
-
-- HTTP signaling to the broker.
-- STUN traffic if STUN is enabled.
-- WebRTC/UDP traffic to the proxy server.
-- No direct client connection to the controlled target when the target is reachable only from the proxy side.
-
-On the controlled target, defenders should see:
-
-- Requests from the proxy server host.
-- `X-WebRTC-Proxy-Lab: true`.
-- `X-Proxy-Request-ID`, which maps target hits back to webclient logs.
-
-## STUN And Enterprise Networks
-
-External STUN is not always required. Same-host and same-LAN tests often work without it. Across NATed networks, STUN is often needed so peers can discover public-facing candidates.
-
-Enterprise networks may block public STUN and arbitrary peer UDP. In that case, signaling can succeed while WebRTC fails to connect. That is still a valid result: it means the network allowed rendezvous but blocked the proxy channel at NAT traversal or UDP policy.
-
-## Running The Proxy Test
-
-Build:
-
-```powershell
-.\scripts\run-lab.ps1 -Role build
-```
-
-Run a local Windows test:
-
-```powershell
-.\scripts\run-lab.ps1 -Role proxy-local -Session proxy-local -NoStun
-```
-
-For split testing, run broker, target, and proxy on the server side, then run `webclient` from the monitored client network.
-
-## Detection Ideas
-
-Signals worth measuring:
-
-- Whether the client resolves or connects to the final target directly.
-- Whether the final target sees the client IP or the proxy server IP.
-- WebRTC DataChannel session duration.
-- UDP flow timing and byte distribution.
-- STUN reachability.
-- Differences between allowed collaboration WebRTC and this standalone client process.
+- `broker`: SDP offer/answer exchange.
+- `proxy`: bounded WebRTC proxy server.
+- `webclient`: CLI request client.
+- `browserui`: local browser-based viewer.
+- `target`: controlled local HTTP server for verification.
 
 ## Safety Boundary
 
-This project is a defensive network-behavior emulator. It uses synthetic requests against controlled targets. The proxy server is deliberately bounded so it cannot be used as a general-purpose proxy to arbitrary third-party destinations.
+The proxy host accepts only relative-path requests under a configured `-TargetUrl`. The PoC does not implement command execution, persistence, credential access, file collection, process hiding, or unrestricted proxying.
+
+## Expected Observations
+
+On the monitored client:
+
+- HTTP signaling to the broker.
+- WebRTC/UDP traffic to the proxy host.
+- STUN traffic when enabled.
+- No direct DNS lookup or direct connection to the final target if the test is isolated correctly.
+
+On the proxy host:
+
+- DNS lookup and HTTP/HTTPS connection to the configured target.
+- Proxy logs containing `X-Proxy-Request-ID` correlation IDs.
+
+On the target:
+
+- Requests from the proxy host, not the monitored client.
+- `X-WebRTC-Proxy-Lab: true`.
+- `X-Proxy-Request-ID`.
+
+## Lab Finding
+
+In one controlled test, a monitored client with the NextDNS client installed had the target site blocked by policy and block bypass methods enabled. Direct access from the client was blocked. The same target loaded through the WebRTC proxy viewer because the client did not resolve or connect to the target directly; the proxy host resolved and fetched it.
+
+Careful conclusion:
+
+```text
+Client-side DNS filtering did not observe the final destination domain when that destination was resolved and fetched by a separate WebRTC proxy host.
+```
+
+This does not imply invisibility or bypass of firewall, EDR, NDR, TLS inspection, or WebRTC-aware controls.
+
+## Detection And Measurement
+
+Useful evidence:
+
+- DNS-filter logs for direct blocked access.
+- Absence of target-domain DNS queries during proxied access.
+- Browser viewer DataChannel logs.
+- Proxy host request logs.
+- Target server logs showing proxy-host source IP.
+- Packet captures showing signaling, STUN, and WebRTC/UDP.
+
+## Network Notes
+
+STUN is not required for same-host testing and may not be required on the same LAN. Across NATed networks, STUN is usually required. If signaling succeeds but ICE never connects, UDP policy or NAT traversal is the likely blocker. TURN is the standard fallback for WebRTC paths that cannot connect directly, but this PoC intentionally does not bundle TURN.
+
+## Claim Boundary
+
+This lab supports narrow, evidence-based claims about DNS-filter visibility and WebRTC transport behavior. It should not be described as a general-purpose bypass or stealth channel.
