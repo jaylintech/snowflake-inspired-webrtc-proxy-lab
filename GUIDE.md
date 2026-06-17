@@ -157,6 +157,8 @@ Client-side DNS filtering did not observe the final target domain when the monit
 
 An off-LAN test validates real NAT, routing, firewall, STUN, and UDP behavior.
 
+For detailed remote-host commands and failure triage, see [REMOTE_TEST.md](REMOTE_TEST.md).
+
 Recommended topology:
 
 ```text

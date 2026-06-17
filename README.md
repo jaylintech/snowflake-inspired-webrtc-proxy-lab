@@ -13,6 +13,7 @@ The lab compares direct client access to a destination with access through a Web
 Additional documentation:
 
 - [GUIDE.md](GUIDE.md): runbook and verification steps
+- [REMOTE_TEST.md](REMOTE_TEST.md): off-LAN remote proxy host test guide
 - [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
 - [ARTICLE.md](ARTICLE.md): concise write-up draft
 
