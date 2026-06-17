@@ -106,6 +106,8 @@ http://127.0.0.1:7777
 
 The viewer accepts `/`, `/robots.txt`, or full URLs under the configured target such as `https://example.com/robots.txt`. Large responses are sent in DataChannel-safe chunks and reassembled by the client. The proxy still enforces `-MaxBody`.
 
+If a page returns `200` but has little visible sanitized content, the viewer shows a raw HTML preview. This usually means the target page depends on disabled scripts, frames, or external assets.
+
 ## Split Test
 
 Use this for content-filter and DNS-filter experiments.

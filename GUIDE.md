@@ -194,6 +194,7 @@ Common outcomes:
 - Broker unreachable: TCP `8080`, host firewall, security group, or wrong IP.
 - Broker works but ICE fails: UDP/NAT/STUN issue.
 - WebRTC connects but target fails: proxy target URL, proxy egress, or target-side block.
+- `status=200` with sparse viewer output: target page likely depends on scripts, frames, or external assets disabled by the sanitized viewer.
 - Target sees client directly: test isolation error or direct browsing/curling from the client.
 
 ## Claim Boundary

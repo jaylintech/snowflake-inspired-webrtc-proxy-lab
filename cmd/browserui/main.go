@@ -251,6 +251,28 @@ const browserPage = `<!doctype html>
       white-space: pre-wrap;
       font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
     }
+    .empty-render {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid #f0c36d;
+      border-radius: 6px;
+      background: #fff8dc;
+      color: #6f4e00;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .source-preview {
+      margin-top: 10px;
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 360px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f6f8fa;
+      color: #24292f;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
     @media (max-width: 920px) {
       .controls { grid-template-columns: 1fr; }
       .buttons { align-items: stretch; }
@@ -764,7 +786,9 @@ const browserPage = `<!doctype html>
         "a[data-proxy-path] { color: #0b6bcb; cursor: pointer; text-decoration: underline; }",
         "a.disabled-link { color: #6e7781; cursor: not-allowed; text-decoration: line-through; }",
         "img, picture, video, audio, canvas, svg { display: none !important; }",
-        ".lab-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; color: #5f6368; font: 13px Arial, Helvetica, sans-serif; }"
+        ".lab-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; color: #5f6368; font: 13px Arial, Helvetica, sans-serif; }",
+        ".empty-render { margin: 12px 0; padding: 12px; border: 1px solid #f0c36d; border-radius: 6px; background: #fff8dc; color: #6f4e00; font: 13px/1.5 Arial, Helvetica, sans-serif; }",
+        ".source-preview { margin-top: 10px; white-space: pre-wrap; overflow: auto; max-height: 360px; padding: 10px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; color: #24292f; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace; }"
       ].join("\n");
       shadow.appendChild(style);
 
@@ -783,6 +807,8 @@ const browserPage = `<!doctype html>
           requestPath(anchor.getAttribute("data-proxy-path"));
         });
       });
+
+      showFallbackIfEmpty(content, html);
     }
 
     function sanitizeDocument(doc, targetURL) {
@@ -794,6 +820,9 @@ const browserPage = `<!doctype html>
         Array.from(element.attributes).forEach(function (attribute) {
           const name = attribute.name.toLowerCase();
           if (name.startsWith("on") || ["src", "srcset", "poster", "ping", "action", "integrity", "style", "xlink:href"].indexOf(name) !== -1) {
+            element.removeAttribute(attribute.name);
+          }
+          if (["hidden", "inert", "aria-hidden"].indexOf(name) !== -1) {
             element.removeAttribute(attribute.name);
           }
           if (name === "href" && element.tagName.toLowerCase() !== "a") {
@@ -834,6 +863,29 @@ const browserPage = `<!doctype html>
           anchor.classList.add("disabled-link");
         }
       });
+    }
+
+    function showFallbackIfEmpty(content, originalHTML) {
+      const visibleText = (content.textContent || "").replace(/\s+/g, " ").trim();
+      if (visibleText.length >= 30) {
+        return;
+      }
+
+      const warning = document.createElement("div");
+      warning.className = "empty-render";
+      warning.textContent = "The target returned HTML, but the sanitized view has little visible text. This page may depend on disabled scripts, external assets, frames, or client-side rendering.";
+      shadow.appendChild(warning);
+
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = "Show raw HTML preview";
+      details.appendChild(summary);
+
+      const preview = document.createElement("pre");
+      preview.className = "source-preview";
+      preview.textContent = originalHTML.slice(0, 20000);
+      details.appendChild(preview);
+      shadow.appendChild(details);
     }
   </script>
 </body>
