@@ -25,6 +25,17 @@ def stun_value(args: argparse.Namespace) -> str:
     return "" if args.no_stun else args.stun
 
 
+def ice_port_args(args: argparse.Namespace) -> list[str]:
+    if args.ice_port_min == 0 and args.ice_port_max == 0:
+        return []
+    return [
+        "-ice-port-min",
+        str(args.ice_port_min),
+        "-ice-port-max",
+        str(args.ice_port_max),
+    ]
+
+
 def role_command(role: str, role_args: list[str]) -> list[str]:
     binary = REPO_ROOT / "bin" / role
     if binary.exists():
@@ -63,7 +74,7 @@ def listener_args(args: argparse.Namespace) -> list[str]:
         str(args.synthetic_bytes),
         "-chunk-bytes",
         str(args.chunk_bytes),
-    ]
+    ] + ice_port_args(args)
 
 
 def client_args(args: argparse.Namespace) -> list[str]:
@@ -86,7 +97,7 @@ def client_args(args: argparse.Namespace) -> list[str]:
         args.task_delay,
         "-chunk-delay",
         args.chunk_delay,
-    ]
+    ] + ice_port_args(args)
 
 
 def relay_args(args: argparse.Namespace) -> list[str]:
@@ -101,7 +112,7 @@ def relay_args(args: argparse.Namespace) -> list[str]:
         args.target_url,
         "-max-body",
         str(args.max_body),
-    ]
+    ] + ice_port_args(args)
 
 
 def webclient_args(args: argparse.Namespace) -> list[str]:
@@ -120,7 +131,7 @@ def webclient_args(args: argparse.Namespace) -> list[str]:
         args.body,
         "-interval",
         args.interval,
-    ]
+    ] + ice_port_args(args)
 
 
 def browserui_args(args: argparse.Namespace) -> list[str]:
@@ -324,6 +335,8 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ui-listen", default="127.0.0.1:7777")
     parser.add_argument("--stun", default=DEFAULT_STUN)
     parser.add_argument("--no-stun", action="store_true")
+    parser.add_argument("--ice-port-min", type=int, default=0)
+    parser.add_argument("--ice-port-max", type=int, default=0)
     parser.add_argument("--max-body", type=int, default=262144)
     parser.add_argument("--interval", default="8s")
     parser.add_argument("--jitter", type=int, default=35)

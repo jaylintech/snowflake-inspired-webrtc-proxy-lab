@@ -10,6 +10,8 @@ param(
     [string]$UiListen = "127.0.0.1:7777",
     [string]$Stun = "stun:stun.l.google.com:19302",
     [switch]$NoStun,
+    [int]$IcePortMin = 0,
+    [int]$IcePortMax = 0,
     [int]$MaxBody = 262144,
 
     [string]$Interval = "8s",
@@ -48,6 +50,13 @@ function Get-StunNativeArgs {
         return @("-stun=")
     }
     return @("-stun", $Stun)
+}
+
+function Get-IcePortNativeArgs {
+    if ($IcePortMin -eq 0 -and $IcePortMax -eq 0) {
+        return @()
+    }
+    return @("-ice-port-min", "$IcePortMin", "-ice-port-max", "$IcePortMax")
 }
 
 function Test-CommandAvailable {
@@ -133,6 +142,7 @@ function Invoke-Listener {
         "-chunk-bytes", "$ChunkBytes"
     )
     $args += Get-StunNativeArgs
+    $args += Get-IcePortNativeArgs
     Invoke-GoOrBinary -CommandName "listener" -CommandArgs $args
 }
 
@@ -148,6 +158,7 @@ function Invoke-Client {
         "-chunk-delay", $ChunkDelay
     )
     $args += Get-StunNativeArgs
+    $args += Get-IcePortNativeArgs
     Invoke-GoOrBinary -CommandName "client" -CommandArgs $args
 }
 
@@ -159,6 +170,7 @@ function Invoke-Relay {
         "-max-body", "$MaxBody"
     )
     $args += Get-StunNativeArgs
+    $args += Get-IcePortNativeArgs
     Invoke-GoOrBinary -CommandName "relay" -CommandArgs $args
 }
 
@@ -172,6 +184,7 @@ function Invoke-WebClient {
         "-interval", $Interval
     )
     $args += Get-StunNativeArgs
+    $args += Get-IcePortNativeArgs
     Invoke-GoOrBinary -CommandName "webclient" -CommandArgs $args
 }
 
@@ -202,6 +215,8 @@ function Start-LabWindow {
         "-TargetListen", $TargetListen,
         "-TargetUrl", $TargetUrl,
         "-UiListen", $UiListen,
+        "-IcePortMin", "$IcePortMin",
+        "-IcePortMax", "$IcePortMax",
         "-Interval", $Interval,
         "-Jitter", "$Jitter",
         "-Count", "$Count",

@@ -24,6 +24,8 @@ func main() {
 	brokerURL := flag.String("broker", "http://127.0.0.1:8080", "signaling broker URL")
 	sessionID := flag.String("session", "proxy-session", "shared signaling session id")
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
+	icePortMin := flag.Uint("ice-port-min", 0, "minimum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
+	icePortMax := flag.Uint("ice-port-max", 0, "maximum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
 	paths := flag.String("paths", "/,/healthz,/article-proof?via=webrtc", "comma-separated relative paths to request through the proxy server")
 	method := flag.String("method", httpMethodGet, "GET or POST")
 	body := flag.String("body", "synthetic proxy lab body", "POST body used when method is POST")
@@ -43,7 +45,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := webrtc.NewPeerConnection(lab.NewWebRTCConfig(*stunServers))
+	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}

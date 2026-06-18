@@ -171,13 +171,16 @@ Recommended topology:
 Proxy host requirements:
 
 - Inbound TCP `8080` for the broker.
-- Inbound UDP for WebRTC/ICE.
+- Inbound UDP for WebRTC/ICE. Use `UDP 40000` with `-IcePortMin 40000 -IcePortMax 40000` for a narrow router rule.
 - Outbound HTTPS to the controlled target.
 - Outbound STUN from the monitored client, unless testing without STUN.
 
-Current limitation:
+Recommended temporary forwards to the proxy host:
 
-The PoC currently lets WebRTC choose UDP candidate ports. Public cloud tests may require broader UDP firewall allowance. A fixed ICE UDP port range is recommended before longer public tests.
+```text
+TCP 8080
+UDP 40000
+```
 
 ## STUN And Failure Modes
 

@@ -36,13 +36,18 @@ Open these only for the test window:
 | Direction | Protocol | Port | Purpose |
 | --- | --- | --- | --- |
 | Inbound | TCP | `8080` | Broker signaling |
-| Inbound | UDP | ephemeral UDP | WebRTC/ICE DataChannel path |
+| Inbound | UDP | `40000` recommended | WebRTC/ICE DataChannel path |
 | Outbound | UDP | `19302` or configured STUN | STUN, if enabled |
 | Outbound | TCP | `443` or target port | Fetch controlled target |
 
-Current limitation:
+Router or cloud firewall rule:
 
-The PoC currently lets WebRTC choose its UDP candidate port. For a public cloud test, temporarily allow inbound UDP from the monitored client's public IP only. A future fixed ICE UDP port range would allow a narrower rule such as `UDP 40000-40100`.
+```text
+TCP 8080  -> remote proxy host TCP 8080
+UDP 40000 -> remote proxy host UDP 40000
+```
+
+Restrict inbound rules to the monitored client's public IP when your router or firewall supports it. Remove the rules after testing.
 
 ## Remote Host Setup
 
@@ -69,7 +74,9 @@ python3 scripts/run_lab.py proxy \
   --broker-url http://127.0.0.1:8080 \
   --session remote-test \
   --target-url https://controlled-target.example \
-  --max-body 1048576
+  --max-body 1048576 \
+  --ice-port-min 40000 \
+  --ice-port-max 40000
 ```
 
 Replace `https://controlled-target.example` with the owned or authorized target.
@@ -172,11 +179,11 @@ Likely causes:
 Likely causes:
 
 - Inbound UDP to the remote proxy host is blocked.
-- UDP is not source-restricted correctly to the monitored client's public IP.
+- UDP `40000` is not forwarded to the proxy host.
 - STUN is blocked from the monitored client or proxy host.
 - NAT traversal fails without TURN.
 
-This PoC does not bundle TURN. If this failure is consistent across networks, the next engineering step is adding a fixed ICE UDP port range or TURN support for controlled lab use.
+This PoC does not bundle TURN. If this failure is consistent across networks even with UDP `40000` forwarded, the next engineering step is TURN support for controlled lab use.
 
 ### DataChannel Connects, Target Fails
 
