@@ -138,7 +138,8 @@ Expected observation:
 - Same host or same LAN: `-NoStun` may be sufficient.
 - NAT-to-NAT paths usually require STUN.
 - Strict networks may block public STUN or peer UDP.
-- For remote router tests, forward `TCP 8080` and a fixed UDP ICE port such as `UDP 40000` to the proxy host, then run the proxy with `-IcePortMin 40000 -IcePortMax 40000`.
+- For remote router tests, forward `TCP 8080` and a fixed UDP ICE port such as `UDP 40000` to the proxy host, then run the proxy with `-IcePortMin 40000 -IcePortMax 40000 -AdvertiseIP YOUR_PUBLIC_IP`.
+- If the remote firewall shows UDP checks to private addresses such as `192.168.x.x` or `172.16.x.x`, the proxy is advertising private ICE candidates instead of the public IP.
 - If signaling succeeds but ICE never connects, UDP/NAT traversal is the likely failure point.
 - TURN is the normal fallback for WebRTC paths where direct UDP cannot connect; this PoC does not bundle TURN.
 

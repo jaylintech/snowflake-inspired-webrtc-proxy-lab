@@ -30,6 +30,7 @@ func main() {
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
 	icePortMin := flag.Uint("ice-port-min", 0, "minimum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
 	icePortMax := flag.Uint("ice-port-max", 0, "maximum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
+	advertiseIP := flag.String("advertise-ip", "", "public IP to advertise for ICE host candidates when using a router port forward")
 	target := flag.String("target", "http://127.0.0.1:9090", "single controlled target base URL for the bounded proxy server")
 	maxBody := flag.Int64("max-body", 262144, "maximum response body bytes returned to the client")
 	requestTimeout := flag.Duration("request-timeout", 10*time.Second, "target request timeout")
@@ -48,7 +49,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax)
+	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}
@@ -65,6 +66,11 @@ func main() {
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("peer connection state: %s", state.String())
+	})
+	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate != nil {
+			log.Printf("local ICE candidate: %s", candidate.String())
+		}
 	})
 
 	pc.OnDataChannel(func(d *webrtc.DataChannel) {

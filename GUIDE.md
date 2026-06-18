@@ -171,7 +171,7 @@ Recommended topology:
 Proxy host requirements:
 
 - Inbound TCP `8080` for the broker.
-- Inbound UDP for WebRTC/ICE. Use `UDP 40000` with `-IcePortMin 40000 -IcePortMax 40000` for a narrow router rule.
+- Inbound UDP for WebRTC/ICE. Use `UDP 40000` with `-IcePortMin 40000 -IcePortMax 40000 -AdvertiseIP YOUR_PUBLIC_IP` for a narrow router rule.
 - Outbound HTTPS to the controlled target.
 - Outbound STUN from the monitored client, unless testing without STUN.
 
@@ -180,6 +180,12 @@ Recommended temporary forwards to the proxy host:
 ```text
 TCP 8080
 UDP 40000
+```
+
+Remote Windows proxy example:
+
+```powershell
+.\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session remote-test -TargetUrl https://controlled-target.example -MaxBody 1048576 -IcePortMin 40000 -IcePortMax 40000 -AdvertiseIP YOUR_PUBLIC_IP
 ```
 
 ## STUN And Failure Modes

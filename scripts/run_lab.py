@@ -26,14 +26,19 @@ def stun_value(args: argparse.Namespace) -> str:
 
 
 def ice_port_args(args: argparse.Namespace) -> list[str]:
-    if args.ice_port_min == 0 and args.ice_port_max == 0:
-        return []
-    return [
-        "-ice-port-min",
-        str(args.ice_port_min),
-        "-ice-port-max",
-        str(args.ice_port_max),
-    ]
+    out: list[str] = []
+    if args.ice_port_min != 0 or args.ice_port_max != 0:
+        out.extend(
+            [
+                "-ice-port-min",
+                str(args.ice_port_min),
+                "-ice-port-max",
+                str(args.ice_port_max),
+            ]
+        )
+    if args.advertise_ip:
+        out.extend(["-advertise-ip", args.advertise_ip])
+    return out
 
 
 def role_command(role: str, role_args: list[str]) -> list[str]:
@@ -337,6 +342,7 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-stun", action="store_true")
     parser.add_argument("--ice-port-min", type=int, default=0)
     parser.add_argument("--ice-port-max", type=int, default=0)
+    parser.add_argument("--advertise-ip", default="")
     parser.add_argument("--max-body", type=int, default=262144)
     parser.add_argument("--interval", default="8s")
     parser.add_argument("--jitter", type=int, default=35)

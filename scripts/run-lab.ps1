@@ -12,6 +12,7 @@ param(
     [switch]$NoStun,
     [int]$IcePortMin = 0,
     [int]$IcePortMax = 0,
+    [string]$AdvertiseIP = "",
     [int]$MaxBody = 262144,
 
     [string]$Interval = "8s",
@@ -53,10 +54,14 @@ function Get-StunNativeArgs {
 }
 
 function Get-IcePortNativeArgs {
-    if ($IcePortMin -eq 0 -and $IcePortMax -eq 0) {
-        return @()
+    $args = @()
+    if ($IcePortMin -ne 0 -or $IcePortMax -ne 0) {
+        $args += @("-ice-port-min", "$IcePortMin", "-ice-port-max", "$IcePortMax")
     }
-    return @("-ice-port-min", "$IcePortMin", "-ice-port-max", "$IcePortMax")
+    if (-not [string]::IsNullOrWhiteSpace($AdvertiseIP)) {
+        $args += @("-advertise-ip", $AdvertiseIP)
+    }
+    return $args
 }
 
 function Test-CommandAvailable {
@@ -217,6 +222,7 @@ function Start-LabWindow {
         "-UiListen", $UiListen,
         "-IcePortMin", "$IcePortMin",
         "-IcePortMax", "$IcePortMax",
+        "-AdvertiseIP", $AdvertiseIP,
         "-Interval", $Interval,
         "-Jitter", "$Jitter",
         "-Count", "$Count",

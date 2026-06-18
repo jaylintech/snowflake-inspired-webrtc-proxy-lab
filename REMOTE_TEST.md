@@ -76,10 +76,12 @@ python3 scripts/run_lab.py proxy \
   --target-url https://controlled-target.example \
   --max-body 1048576 \
   --ice-port-min 40000 \
-  --ice-port-max 40000
+  --ice-port-max 40000 \
+  --advertise-ip YOUR_PUBLIC_IP
 ```
 
 Replace `https://controlled-target.example` with the owned or authorized target.
+Replace `YOUR_PUBLIC_IP` with the public IP that the monitored client should reach, such as the WAN IP on your router.
 
 ## Monitored Client Setup
 
@@ -180,6 +182,7 @@ Likely causes:
 
 - Inbound UDP to the remote proxy host is blocked.
 - UDP `40000` is not forwarded to the proxy host.
+- The proxy was started without `--advertise-ip YOUR_PUBLIC_IP`, causing remote clients to try private ICE candidates such as `192.168.x.x`, `172.16.x.x`, or virtual adapter IPs.
 - STUN is blocked from the monitored client or proxy host.
 - NAT traversal fails without TURN.
 

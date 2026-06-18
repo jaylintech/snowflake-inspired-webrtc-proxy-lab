@@ -2,6 +2,7 @@ package lab
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/pion/webrtc/v3"
@@ -24,11 +25,13 @@ func NewWebRTCConfig(stunCSV string) webrtc.Configuration {
 	}
 }
 
-// NewPeerConnection creates a PeerConnection with optional local ICE UDP port bounds.
+// NewPeerConnection creates a PeerConnection with optional local ICE UDP port bounds
+// and an optional public IP to advertise for host candidates behind a port forward.
 // Pass 0 for both port values to use Pion's default dynamic UDP port behavior.
-func NewPeerConnection(stunCSV string, icePortMin, icePortMax uint) (*webrtc.PeerConnection, error) {
+func NewPeerConnection(stunCSV string, icePortMin, icePortMax uint, advertiseIP string) (*webrtc.PeerConnection, error) {
 	config := NewWebRTCConfig(stunCSV)
-	if icePortMin == 0 && icePortMax == 0 {
+	advertiseIP = strings.TrimSpace(advertiseIP)
+	if icePortMin == 0 && icePortMax == 0 && advertiseIP == "" {
 		return webrtc.NewPeerConnection(config)
 	}
 	if icePortMin == 0 || icePortMax == 0 {
@@ -37,10 +40,16 @@ func NewPeerConnection(stunCSV string, icePortMin, icePortMax uint) (*webrtc.Pee
 	if icePortMin > 65535 || icePortMax > 65535 {
 		return nil, fmt.Errorf("ice port values must be between 1 and 65535")
 	}
+	if advertiseIP != "" && net.ParseIP(advertiseIP) == nil {
+		return nil, fmt.Errorf("advertise IP must be a valid IPv4 or IPv6 address")
+	}
 
 	var settingEngine webrtc.SettingEngine
 	if err := settingEngine.SetEphemeralUDPPortRange(uint16(icePortMin), uint16(icePortMax)); err != nil {
 		return nil, fmt.Errorf("set ICE UDP port range: %w", err)
+	}
+	if advertiseIP != "" {
+		settingEngine.SetNAT1To1IPs([]string{advertiseIP}, webrtc.ICECandidateTypeHost)
 	}
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))

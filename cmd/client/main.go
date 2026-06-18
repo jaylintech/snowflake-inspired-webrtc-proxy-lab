@@ -25,6 +25,7 @@ func main() {
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
 	icePortMin := flag.Uint("ice-port-min", 0, "minimum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
 	icePortMax := flag.Uint("ice-port-max", 0, "maximum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
+	advertiseIP := flag.String("advertise-ip", "", "public IP to advertise for ICE host candidates when using a router port forward")
 	interval := flag.Duration("interval", 10*time.Second, "heartbeat interval")
 	jitter := flag.Int("jitter", 20, "heartbeat jitter percentage from 0 to 90")
 	count := flag.Int("count", 0, "number of heartbeats to send; 0 sends until interrupted")
@@ -41,7 +42,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax)
+	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}

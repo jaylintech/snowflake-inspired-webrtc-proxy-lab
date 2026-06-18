@@ -26,6 +26,7 @@ func main() {
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
 	icePortMin := flag.Uint("ice-port-min", 0, "minimum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
 	icePortMax := flag.Uint("ice-port-max", 0, "maximum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
+	advertiseIP := flag.String("advertise-ip", "", "public IP to advertise for ICE host candidates when using a router port forward")
 	paths := flag.String("paths", "/,/healthz,/article-proof?via=webrtc", "comma-separated relative paths to request through the proxy server")
 	method := flag.String("method", httpMethodGet, "GET or POST")
 	body := flag.String("body", "synthetic proxy lab body", "POST body used when method is POST")
@@ -45,7 +46,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax)
+	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}

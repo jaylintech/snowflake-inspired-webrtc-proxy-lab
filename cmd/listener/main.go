@@ -24,6 +24,7 @@ func main() {
 	stunServers := flag.String("stun", lab.DefaultSTUN, "comma-separated STUN URLs; empty disables external STUN")
 	icePortMin := flag.Uint("ice-port-min", 0, "minimum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
 	icePortMax := flag.Uint("ice-port-max", 0, "maximum local UDP port for Pion ICE candidates; 0 uses dynamic ports")
+	advertiseIP := flag.String("advertise-ip", "", "public IP to advertise for ICE host candidates when using a router port forward")
 	taskEvery := flag.Int("task-every", 3, "send a simulated task every N beacons; 0 disables tasking")
 	taskSequence := flag.String("task-sequence", "sleep,inventory,synthetic-upload", "comma-separated simulated task actions")
 	syntheticBytes := flag.Int("synthetic-bytes", 4096, "synthetic upload bytes requested for synthetic-upload tasks")
@@ -38,7 +39,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax)
+	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}
