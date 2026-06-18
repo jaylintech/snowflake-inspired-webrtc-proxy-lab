@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"snowflakeprotocolpoc/internal/lab"
+	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 type broker struct {

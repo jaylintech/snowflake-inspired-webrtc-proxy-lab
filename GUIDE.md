@@ -209,10 +209,6 @@ Common outcomes:
 - `status=200` with sparse viewer output: target page likely depends on scripts, frames, or external assets disabled by the sanitized viewer.
 - Target sees client directly: test isolation error or direct browsing/curling from the client.
 
-## Claim Boundary
-
-Do not overstate results. A successful DNS-filter test shows that a DNS filter on the monitored client did not see a destination resolved by the proxy host. It does not prove invisibility or bypass of firewall, EDR, NDR, TLS inspection, or WebRTC-aware controls.
-
 Use only in owned or explicitly authorized environments.
 
 If endpoint tooling flags the binaries or wrapper scripts, see [DETECTION_NOTES.md](DETECTION_NOTES.md) for expected reasons and lab-safe handling.

@@ -1,4 +1,4 @@
-module snowflakeprotocolpoc
+module snowflake-inspired-webrtc-proxy-lab
 
 go 1.22
 

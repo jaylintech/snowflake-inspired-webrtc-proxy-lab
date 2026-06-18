@@ -19,7 +19,7 @@ import (
 
 	"github.com/pion/webrtc/v3"
 
-	"snowflakeprotocolpoc/internal/lab"
+	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 const responseChunkBytes = 24 * 1024
@@ -185,7 +185,7 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		sendRelayResponse(d, errorResponse(relayReq.ID, "build target request failed"))
 		return
 	}
-	req.Header.Set("User-Agent", "snowflakeprotocolpoc-proxy/1.0")
+	req.Header.Set("User-Agent", "snowflake-inspired-webrtc-proxy-lab/1.0")
 	req.Header.Set("X-WebRTC-Proxy-Lab", "true")
 	req.Header.Set("X-Proxy-Request-ID", relayReq.ID)
 	if method == http.MethodPost {

@@ -54,8 +54,8 @@ Restrict inbound rules to the monitored client's public IP when your router or f
 Clone and build:
 
 ```bash
-git clone https://github.com/jaylintech/snowflakeprotocolpoc.git
-cd snowflakeprotocolpoc
+git clone https://github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab.git
+cd snowflake-inspired-webrtc-proxy-lab
 python3 scripts/run_lab.py build
 ```
 
@@ -222,13 +222,3 @@ After the test:
 - Remove temporary firewall/security-group rules.
 - Shut down or destroy the temporary VM.
 - Preserve logs and packet captures needed for reporting.
-
-## Claim Boundary
-
-A successful remote test supports a narrow claim:
-
-```text
-In this lab, the monitored client reached a blocked destination through a bounded WebRTC proxy host without resolving the destination domain locally.
-```
-
-It does not prove invisibility or bypass of all security controls.
