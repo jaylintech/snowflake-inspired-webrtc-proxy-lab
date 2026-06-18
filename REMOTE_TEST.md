@@ -83,6 +83,8 @@ python3 scripts/run_lab.py proxy \
 Replace `https://controlled-target.example` with the owned or authorized target.
 Replace `YOUR_PUBLIC_IP` with the public IP that the monitored client should reach, such as the WAN IP on your router.
 
+The proxy log should include a local ICE candidate containing the public IP and UDP `40000`. If it only advertises private addresses such as `192.168.x.x` or `172.16.x.x`, stop the proxy and restart it with `--advertise-ip YOUR_PUBLIC_IP`.
+
 ## Monitored Client Setup
 
 Update and build:
@@ -138,6 +140,7 @@ proxy response id=browser-001 status=200
 Remote proxy host:
 
 ```text
+local ICE candidate: ... YOUR_PUBLIC_IP ... 40000 ...
 proxy data channel "lab-proxy" created by client
 proxy request id=browser-001 method=GET target=https://controlled-target.example/
 ```
@@ -187,6 +190,12 @@ Likely causes:
 - NAT traversal fails without TURN.
 
 This PoC does not bundle TURN. If this failure is consistent across networks even with UDP `40000` forwarded, the next engineering step is TURN support for controlled lab use.
+
+Observed lab symptom:
+
+```text
+TCP broker health worked, but firewall logs showed UDP 40000 attempts to private/local ICE candidate addresses. Adding the fixed UDP port and public advertised IP corrected the candidate path.
+```
 
 ### DataChannel Connects, Target Fails
 

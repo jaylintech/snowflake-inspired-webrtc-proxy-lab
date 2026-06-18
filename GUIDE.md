@@ -188,6 +188,8 @@ Remote Windows proxy example:
 .\scripts\run-lab.ps1 -Role proxy -BrokerUrl http://127.0.0.1:8080 -Session remote-test -TargetUrl https://controlled-target.example -MaxBody 1048576 -IcePortMin 40000 -IcePortMax 40000 -AdvertiseIP YOUR_PUBLIC_IP
 ```
 
+The proxy log should show a local ICE candidate containing `YOUR_PUBLIC_IP` and UDP `40000`. If the remote firewall shows UDP checks to `192.168.x.x`, `172.16.x.x`, or virtual adapter IPs, the proxy is still advertising private candidates.
+
 ## STUN And Failure Modes
 
 STUN guidance:

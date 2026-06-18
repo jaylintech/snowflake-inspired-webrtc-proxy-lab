@@ -42,7 +42,33 @@ Preserve these artifacts for repeatable reporting:
 - Target server log showing the proxy host as requester.
 - Packet capture or flow log showing client-to-proxy WebRTC/UDP.
 
-## Off-LAN Test Plan
+## Remote Router WebRTC Test
+
+Date: 2026-06-18
+
+Configuration:
+
+- Proxy host: Device A behind a router.
+- Monitored client: Device B outside the proxy host LAN.
+- Router forwards: TCP `8080` and UDP `40000` to Device A.
+- Proxy ICE settings: `-IcePortMin 40000 -IcePortMax 40000 -AdvertiseIP YOUR_PUBLIC_IP`.
+- Client interface: `browserui` pointed at `http://PUBLIC_PROXY_IP:8080`.
+
+Result:
+
+- Broker health check returned HTTP `204`, confirming TCP signaling reachability.
+- Before `-AdvertiseIP`, the remote firewall view showed UDP `40000` checks toward private or local adapter addresses such as `192.168.x.x` and `172.16.x.x`.
+- After forwarding UDP `40000` and advertising the public IP, the WebRTC proxy path connected successfully.
+
+Interpretation:
+
+```text
+For an off-LAN router test, broker reachability alone is insufficient. The proxy host must expose a reachable UDP ICE candidate. A fixed ICE UDP port plus an advertised public IP produced a working remote WebRTC DataChannel path in this lab.
+```
+
+This finding does not imply that all remote networks will allow WebRTC/UDP. Enterprise egress policy, NAT behavior, firewall rules, STUN restrictions, and lack of TURN can still prevent connection.
+
+## Off-LAN Test Shape
 
 Purpose:
 
@@ -63,7 +89,7 @@ Requirements:
 - Temporary public VM or VPS for the proxy host.
 - Owned target domain with server logs.
 - TCP `8080` inbound to the proxy host.
-- UDP inbound to the proxy host for WebRTC/ICE.
+- UDP `40000` inbound to the proxy host for WebRTC/ICE, when using the documented fixed-port setup.
 - Proxy bounded to one `-TargetUrl`.
 - VM removed or shut down after testing.
 
@@ -71,12 +97,9 @@ Expected failure points:
 
 - Broker blocked: TCP `8080` or host firewall issue.
 - ICE failure: UDP, NAT, STUN, or cloud firewall issue.
+- Private candidates: use `-AdvertiseIP YOUR_PUBLIC_IP` if the remote side attempts UDP to `192.168.x.x`, `172.16.x.x`, or other non-public addresses.
 - Target failure: proxy host cannot reach the target.
 - Truncation: raise `-MaxBody` for large HTML responses.
-
-Current engineering note:
-
-The PoC currently lets WebRTC choose UDP candidate ports. A fixed ICE UDP port range would make public cloud tests cleaner because the proxy host could expose a narrow UDP range instead of broad UDP.
 
 ## Claim Boundary
 
