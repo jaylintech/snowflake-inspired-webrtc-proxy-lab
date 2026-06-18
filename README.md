@@ -15,6 +15,7 @@ Additional documentation:
 - [GUIDE.md](GUIDE.md): runbook and verification steps
 - [REMOTE_TEST.md](REMOTE_TEST.md): off-LAN remote proxy host test guide
 - [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
+- [DETECTION_NOTES.md](DETECTION_NOTES.md): why endpoint tools may flag the lab and how to handle that transparently
 - [ARTICLE.md](ARTICLE.md): concise write-up draft
 
 ## Scope
@@ -40,6 +41,7 @@ This project is a defensive network-behavior lab. It is intentionally bounded:
 Windows:
 
 ```powershell
+Unblock-File .\scripts\run-lab.ps1
 .\scripts\run-lab.ps1 -Role build
 ```
 

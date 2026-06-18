@@ -569,7 +569,11 @@ const browserPage = `<!doctype html>
           return "";
         }
 
-        const normalized = inputURL.pathname + inputURL.search;
+        const normalized = targetRelativePath(inputURL, target);
+        if (!normalized) {
+          logLine("blocked " + inputURL.pathname + "; URL path is outside the configured target base path");
+          return "";
+        }
         logLine("normalized " + path + " to " + (normalized || "/"));
         return normalized || "/";
       }
@@ -578,6 +582,27 @@ const browserPage = `<!doctype html>
         path = "/" + path;
       }
       return path;
+    }
+
+    function targetRelativePath(inputURL, targetURL) {
+      const basePath = normalizedBasePath(targetURL.pathname);
+      if (basePath && inputURL.pathname !== basePath && !inputURL.pathname.startsWith(basePath + "/")) {
+        return "";
+      }
+
+      let path = basePath ? inputURL.pathname.slice(basePath.length) : inputURL.pathname;
+      if (!path) {
+        path = "/";
+      }
+      if (!path.startsWith("/")) {
+        path = "/" + path;
+      }
+      return path + inputURL.search;
+    }
+
+    function normalizedBasePath(path) {
+      path = String(path || "").replace(/\/+$/, "");
+      return path === "" ? "" : path;
     }
 
     function targetBaseURL() {

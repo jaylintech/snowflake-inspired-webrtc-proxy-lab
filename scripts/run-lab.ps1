@@ -69,6 +69,20 @@ function Get-GoCommand {
     return $null
 }
 
+function Invoke-NativeChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$CommandArgs
+    )
+
+    & $FilePath @CommandArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($CommandArgs -join ' ')"
+    }
+}
+
 function Invoke-GoOrBinary {
     param(
         [Parameter(Mandatory = $true)]
@@ -180,7 +194,6 @@ function Start-LabWindow {
 
     $argList = @(
         "-NoExit",
-        "-ExecutionPolicy", "Bypass",
         "-File", $PSCommandPath,
         "-Role", $WindowRole,
         "-Session", $Session,
@@ -273,9 +286,9 @@ function Invoke-Build {
         }
 
         New-Item -ItemType Directory -Force -Path "bin" | Out-Null
-        & $go mod tidy
-        & $go test ./...
-        & $go build -o bin ./cmd/...
+        Invoke-NativeChecked -FilePath $go -CommandArgs @("mod", "tidy")
+        Invoke-NativeChecked -FilePath $go -CommandArgs @("test", "./...")
+        Invoke-NativeChecked -FilePath $go -CommandArgs @("build", "-o", "bin", "./cmd/...")
     }
     finally {
         Pop-Location
@@ -291,7 +304,7 @@ function Invoke-Test {
             throw "Go 1.22+ is required. Install it from https://go.dev/dl/, restart PowerShell, then rerun this command."
         }
 
-        & $go test ./...
+        Invoke-NativeChecked -FilePath $go -CommandArgs @("test", "./...")
     }
     finally {
         Pop-Location

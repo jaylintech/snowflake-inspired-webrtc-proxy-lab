@@ -23,6 +23,7 @@ Use this first to confirm the code works on one machine.
 Windows:
 
 ```powershell
+Unblock-File .\scripts\run-lab.ps1
 .\scripts\run-lab.ps1 -Role build
 .\scripts\run-lab.ps1 -Role proxy-local -Session proxy-local -NoStun
 ```
@@ -202,3 +203,5 @@ Common outcomes:
 Do not overstate results. A successful DNS-filter test shows that a DNS filter on the monitored client did not see a destination resolved by the proxy host. It does not prove invisibility or bypass of firewall, EDR, NDR, TLS inspection, or WebRTC-aware controls.
 
 Use only in owned or explicitly authorized environments.
+
+If endpoint tooling flags the binaries or wrapper scripts, see [DETECTION_NOTES.md](DETECTION_NOTES.md) for expected reasons and lab-safe handling.

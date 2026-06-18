@@ -129,6 +129,9 @@ func parseTarget(raw string) (*url.URL, error) {
 	if parsed.Host == "" {
 		return nil, fmt.Errorf("target host is required")
 	}
+	if hasParentPathSegment(parsed.Path) {
+		return nil, fmt.Errorf("target path must not contain parent-directory segments")
+	}
 	parsed.Fragment = ""
 	return parsed, nil
 }
@@ -257,12 +260,39 @@ func boundedTargetURL(target *url.URL, requestPath string) (string, error) {
 	if relative.IsAbs() || relative.Host != "" {
 		return "", fmt.Errorf("client may only request relative paths")
 	}
+	if hasParentPathSegment(relative.Path) {
+		return "", fmt.Errorf("request path must not contain parent-directory segments")
+	}
 
 	out := *target
-	out.Path = strings.TrimRight(target.Path, "/") + relative.Path
+	out.Path = joinTargetPath(target.Path, relative.Path)
 	out.RawQuery = relative.RawQuery
 	out.Fragment = ""
 	return out.String(), nil
+}
+
+func joinTargetPath(basePath, requestPath string) string {
+	if requestPath == "" {
+		requestPath = "/"
+	}
+	if !strings.HasPrefix(requestPath, "/") {
+		requestPath = "/" + requestPath
+	}
+
+	basePath = strings.TrimRight(basePath, "/")
+	if basePath == "" {
+		return requestPath
+	}
+	return basePath + requestPath
+}
+
+func hasParentPathSegment(pathValue string) bool {
+	for _, segment := range strings.Split(pathValue, "/") {
+		if segment == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func errorResponse(id, message string) lab.RelayResponse {
