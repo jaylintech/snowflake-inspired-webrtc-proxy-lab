@@ -314,7 +314,7 @@ const browserPage = `<!doctype html>
           <button id="go" disabled>Go</button>
         </div>
         <div id="viewer">
-          <p class="empty">Connect to the proxy session, then request <code>/</code>, <code>/robots.txt</code>, or a URL under the configured target such as <code>https://example.com/robots.txt</code>. Returned HTML is sanitized before rendering so scripts, forms, and external assets do not load directly from this device.</p>
+          <p class="empty">Connect to the proxy session, then request <code>/</code>, <code>/robots.txt</code>, or a URL under the configured target such as <code>https://example.com/robots.txt</code>. Returned HTML is sanitized before rendering. Scripts, forms, and cross-site resources stay disabled; same-origin CSS and images are fetched through the DataChannel.</p>
         </div>
       </section>
       <aside aria-label="Connection log">
@@ -352,6 +352,8 @@ const browserPage = `<!doctype html>
     let channel = null;
     let requestCount = 0;
     let shadow = null;
+    const pendingRequests = new Map();
+    const maxStaticAssets = 40;
     const pendingResponses = new Map();
 
     brokerInput.value = config.brokerUrl;
@@ -527,28 +529,59 @@ const browserPage = `<!doctype html>
     }
 
     function requestPath(rawPath) {
-      if (!channel || channel.readyState !== "open") {
-        logLine("cannot request path before DataChannel is open");
-        return;
-      }
-
       let path = normalizePath(rawPath);
       if (!path) {
         return;
       }
       pathInput.value = path;
 
+      sendProxyRequest(path, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        },
+        render: true
+      }).catch(function (error) {
+        renderError(error.message);
+      });
+    }
+
+    function sendProxyRequest(path, options) {
+      options = options || {};
+      if (!channel || channel.readyState !== "open") {
+        const message = "cannot request path before DataChannel is open";
+        if (options.render) {
+          logLine(message);
+        }
+        return Promise.reject(new Error(message));
+      }
+
       requestCount += 1;
       const requestID = "browser-" + String(requestCount).padStart(3, "0");
       const payload = {
         type: requestType,
         id: requestID,
-        method: "GET",
+        method: options.method || "GET",
         path: path
       };
+      if (options.headers) {
+        payload.headers = options.headers;
+      }
+      if (options.body) {
+        payload.body = options.body;
+      }
 
-      channel.send(JSON.stringify(payload));
-      logLine("sent proxy request id=" + requestID + " path=" + path);
+      const promise = new Promise(function (resolve, reject) {
+        pendingRequests.set(requestID, { resolve: resolve, reject: reject, render: options.render === true });
+      });
+
+      try {
+        channel.send(JSON.stringify(payload));
+        logLine("sent proxy request id=" + requestID + " path=" + path);
+      } catch (error) {
+        pendingRequests.delete(requestID);
+        return Promise.reject(error);
+      }
+      return promise;
     }
 
     function normalizePath(value) {
@@ -669,13 +702,36 @@ const browserPage = `<!doctype html>
         return;
       }
 
+      completeProxyResponse(response);
+    }
+
+    function completeProxyResponse(response) {
+      const pending = pendingRequests.get(response.id);
+      if (pending) {
+        pendingRequests.delete(response.id);
+      }
+
       if (response.error) {
         logLine("proxy response id=" + response.id + " error=" + response.error);
+        if (pending) {
+          pending.reject(new Error(response.error));
+          if (pending.render) {
+            renderError(response.error);
+          }
+          return;
+        }
         renderError(response.error);
         return;
       }
 
       logLine("proxy response id=" + response.id + " status=" + response.status + " bytes=" + response.bytes + " target=" + response.target);
+      if (pending) {
+        pending.resolve(response);
+        if (pending.render) {
+          renderResponse(response);
+        }
+        return;
+      }
       renderResponse(response);
     }
 
@@ -728,8 +784,7 @@ const browserPage = `<!doctype html>
           chunk_total: 0
         });
         pendingResponses.delete(chunk.id);
-        logLine("proxy response id=" + complete.id + " status=" + complete.status + " bytes=" + complete.bytes + " target=" + complete.target);
-        renderResponse(complete);
+        completeProxyResponse(complete);
       } catch (error) {
         pendingResponses.delete(chunk.id);
         logLine("failed to assemble proxy response id=" + chunk.id + ": " + error.message);
@@ -765,8 +820,39 @@ const browserPage = `<!doctype html>
       return out;
     }
 
-    function renderResponse(response) {
+    function bytesToBase64(bytes) {
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+      }
+      return btoa(binary);
+    }
+
+    function responseBodyText(response) {
       const body = response.body || response.body_preview || "";
+      if (response.body_format === "base64") {
+        return new TextDecoder().decode(base64ToBytes(body));
+      }
+      return body;
+    }
+
+    function responseBodyBytes(response) {
+      const body = response.body || "";
+      if (response.body_format === "base64") {
+        return base64ToBytes(body);
+      }
+      return new TextEncoder().encode(body);
+    }
+
+    function responseDataURL(response) {
+      const contentType = String(response.content_type || "application/octet-stream").split(";", 1)[0] || "application/octet-stream";
+      return "data:" + contentType + ";base64," + bytesToBase64(responseBodyBytes(response));
+    }
+
+    function renderResponse(response) {
+      const body = responseBodyText(response);
       const contentType = String(response.content_type || "").toLowerCase();
       const looksHTML = contentType.indexOf("text/html") !== -1 || /^\s*<!doctype|\s*<html[\s>]/i.test(body);
 
@@ -781,7 +867,7 @@ const browserPage = `<!doctype html>
       } else {
         const pre = document.createElement("pre");
         pre.className = "plain-response";
-        pre.textContent = body;
+        pre.textContent = response.body_format === "base64" ? (response.body_preview || "[binary response]") : body;
         viewer.appendChild(pre);
       }
     }
@@ -810,7 +896,8 @@ const browserPage = `<!doctype html>
         "body, main, section, article, div { max-width: 100%; }",
         "a[data-proxy-path] { color: #0b6bcb; cursor: pointer; text-decoration: underline; }",
         "a.disabled-link { color: #6e7781; cursor: not-allowed; text-decoration: line-through; }",
-        "img, picture, video, audio, canvas, svg { display: none !important; }",
+        "img { display: inline-block; max-width: 100%; height: auto; }",
+        "picture, video, audio, canvas, svg { display: none !important; }",
         ".lab-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; color: #5f6368; font: 13px Arial, Helvetica, sans-serif; }",
         ".empty-render { margin: 12px 0; padding: 12px; border: 1px solid #f0c36d; border-radius: 6px; background: #fff8dc; color: #6f4e00; font: 13px/1.5 Arial, Helvetica, sans-serif; }",
         ".source-preview { margin-top: 10px; white-space: pre-wrap; overflow: auto; max-height: 360px; padding: 10px; border: 1px solid #d8dee4; border-radius: 6px; background: #f6f8fa; color: #24292f; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace; }"
@@ -819,7 +906,7 @@ const browserPage = `<!doctype html>
 
       const note = document.createElement("div");
       note.className = "lab-note";
-      note.textContent = "Sanitized HTML view. Scripts, forms, external assets, and cross-site links are disabled so this device does not directly browse the target site.";
+      note.textContent = "Sanitized HTML view. Scripts, forms, and cross-site resources are disabled; same-origin CSS and images are fetched through the DataChannel.";
       shadow.appendChild(note);
 
       const content = document.createElement("div");
@@ -834,12 +921,122 @@ const browserPage = `<!doctype html>
       });
 
       showFallbackIfEmpty(content, html);
+      loadStaticAssets(content, targetURL);
     }
 
+    async function loadStaticAssets(content, pageURL) {
+      const allStylesheets = Array.from(content.querySelectorAll("link[data-proxy-stylesheet-path]"));
+      const stylesheets = allStylesheets.slice(0, maxStaticAssets);
+      for (const link of stylesheets) {
+        const path = link.getAttribute("data-proxy-stylesheet-path");
+        try {
+          const response = await fetchProxyResource(path, "text/css,*/*;q=0.1");
+          if (response.status < 200 || response.status >= 300) {
+            logLine("stylesheet fetch skipped status=" + response.status + " path=" + path);
+            continue;
+          }
+          const style = document.createElement("style");
+          style.textContent = sanitizeCSS(responseBodyText(response));
+          link.replaceWith(style);
+        } catch (error) {
+          logLine("stylesheet fetch failed path=" + path + ": " + error.message);
+          link.remove();
+        }
+      }
+
+      const allImages = Array.from(content.querySelectorAll("img[data-proxy-img-path]"));
+      const images = allImages.slice(0, maxStaticAssets);
+      for (const image of images) {
+        const path = image.getAttribute("data-proxy-img-path");
+        try {
+          const response = await fetchProxyResource(path, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.1");
+          const contentType = String(response.content_type || "").toLowerCase();
+          if (response.status < 200 || response.status >= 300 || contentType.indexOf("image/") !== 0) {
+            logLine("image fetch skipped status=" + response.status + " path=" + path);
+            continue;
+          }
+          image.setAttribute("src", responseDataURL(response));
+        } catch (error) {
+          logLine("image fetch failed path=" + path + ": " + error.message);
+        }
+      }
+
+      const skipped = Math.max(0, (allStylesheets.length - stylesheets.length) + (allImages.length - images.length));
+      if (skipped > 0) {
+        logLine("static asset cap skipped " + skipped + " resource(s)");
+      }
+    }
+
+    function fetchProxyResource(path, accept) {
+      return sendProxyRequest(path, {
+        headers: { Accept: accept },
+        render: false
+      });
+    }
+
+    function sanitizeCSS(css) {
+      return String(css || "")
+        .replace(/@import\s+[^;]+;?/gi, "")
+        .replace(/url\(([^)]*)\)/gi, function (match, raw) {
+          const value = String(raw || "").trim().replace(/^['\"]|['\"]$/g, "");
+          if (value.toLowerCase().startsWith("data:")) {
+            return "url(" + value + ")";
+          }
+          return "none";
+        });
+    }
+
+    function proxiedResourcePath(raw, pageURL, baseURL) {
+      if (!raw || !pageURL || !baseURL) {
+        return "";
+      }
+      try {
+        const linked = new URL(raw, pageURL.href);
+        if (linked.origin !== baseURL.origin) {
+          return "";
+        }
+        return targetRelativePath(linked, baseURL);
+      } catch (_) {
+        return "";
+      }
+    }
     function sanitizeDocument(doc, targetURL) {
-      doc.querySelectorAll("script, iframe, object, embed, link, meta, form, style").forEach(function (element) {
+      let pageURL;
+      let baseURL;
+      try {
+        pageURL = new URL(targetURL);
+        baseURL = targetBaseURL() || pageURL;
+      } catch (_) {
+        pageURL = null;
+        baseURL = null;
+      }
+
+      doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (link) {
+        const path = proxiedResourcePath(link.getAttribute("href"), pageURL, baseURL);
+        if (path) {
+          link.setAttribute("data-proxy-stylesheet-path", path);
+          link.removeAttribute("href");
+          link.removeAttribute("integrity");
+          link.removeAttribute("crossorigin");
+        }
+      });
+
+      doc.querySelectorAll("img[src]").forEach(function (image) {
+        const path = proxiedResourcePath(image.getAttribute("src"), pageURL, baseURL);
+        if (path) {
+          image.setAttribute("data-proxy-img-path", path);
+        }
+      });
+
+      doc.querySelectorAll("script, iframe, object, embed, link:not([data-proxy-stylesheet-path]), meta, form, style").forEach(function (element) {
         element.remove();
       });
+
+      if (doc.body) {
+        Array.from(doc.querySelectorAll("link[data-proxy-stylesheet-path]")).reverse().forEach(function (link) {
+          doc.body.insertBefore(link, doc.body.firstChild);
+        });
+      }
 
       doc.querySelectorAll("*").forEach(function (element) {
         Array.from(element.attributes).forEach(function (attribute) {
@@ -856,12 +1053,6 @@ const browserPage = `<!doctype html>
         });
       });
 
-      let baseURL;
-      try {
-        baseURL = new URL(targetURL);
-      } catch (_) {
-        baseURL = null;
-      }
 
       doc.querySelectorAll("a[href]").forEach(function (anchor) {
         const raw = anchor.getAttribute("href");
@@ -874,10 +1065,10 @@ const browserPage = `<!doctype html>
         }
 
         try {
-          const linked = new URL(raw, targetURL);
-          if (linked.origin === baseURL.origin) {
+          const path = proxiedResourcePath(raw, pageURL, baseURL);
+          if (path) {
             anchor.setAttribute("href", "#");
-            anchor.setAttribute("data-proxy-path", linked.pathname + linked.search);
+            anchor.setAttribute("data-proxy-path", path);
           } else {
             anchor.removeAttribute("href");
             anchor.classList.add("disabled-link");

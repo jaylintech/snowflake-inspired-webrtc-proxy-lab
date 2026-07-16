@@ -22,7 +22,7 @@ Additional documentation:
 This project is a defensive network-behavior lab. It is intentionally bounded:
 
 - The proxy connects only to the configured `-TargetUrl`.
-- Clients send relative-path requests under that target.
+- Clients send relative-path requests under that target, including same-origin static asset requests initiated by the browser viewer.
 - Proxy mode allows only `GET` and `POST`.
 - Targets must be owned or explicitly authorized for testing.
 - The project does not implement command execution, persistence, credential access, file collection, process hiding, or an open proxy.
@@ -84,7 +84,7 @@ Success indicators:
 
 ## Browser Viewer
 
-The browser viewer provides a lightweight "browser within a browser" experience while keeping the same bounded proxy path. It renders sanitized HTML only; scripts, forms, external assets, and cross-site links are disabled so the client does not directly load target-site resources.
+The browser viewer provides a lightweight "browser within a browser" experience while keeping the same bounded proxy path. It renders sanitized HTML, follows same-origin links under the configured target, and can fetch same-origin CSS/images through the DataChannel. Scripts, forms, frames, cross-site resources, and direct target-site subresource loads remain disabled.
 
 Proxy-server side:
 
@@ -107,7 +107,7 @@ http://127.0.0.1:7777
 
 The viewer accepts `/`, `/robots.txt`, or full URLs under the configured target such as `https://example.com/robots.txt`. Large responses are sent in DataChannel-safe chunks and reassembled by the client. The proxy still enforces `-MaxBody`.
 
-If a page returns `200` but has little visible sanitized content, the viewer shows a raw HTML preview. This usually means the target page depends on disabled scripts, frames, or external assets.
+If a page returns `200` but has little visible sanitized content, the viewer shows a raw HTML preview. This usually means the target page depends on disabled scripts, frames, cross-site resources, service-worker behavior, or other browser features outside this bounded PoC.
 
 ## Split Test
 
@@ -143,6 +143,15 @@ Expected observation:
 - A successful off-LAN router test used TCP `8080`, UDP `40000`, and `-AdvertiseIP`; see [FINDINGS.md](FINDINGS.md) and [REMOTE_TEST.md](REMOTE_TEST.md).
 - If signaling succeeds but ICE never connects, UDP/NAT traversal is the likely failure point.
 - TURN is the normal fallback for WebRTC paths where direct UDP cannot connect; this PoC does not bundle TURN.
+
+## PoC Artifacts
+
+The `artifacts/` directory contains templates for repeatable evidence collection:
+
+- `artifacts/poc-report-template.md`: run summary, topology, commands, evidence, and interpretation.
+- `artifacts/ssl-bump-test-checklist.md`: checklist for authorized SSL-bump/TLS-inspection lab runs.
+
+The current viewer is more useful for static/server-rendered sites because it can fetch same-origin CSS and images through the DataChannel. It is still not a transparent browser proxy: JavaScript-heavy applications, login flows, service workers, media, fonts, WebSockets, and complex CSP behavior may not render correctly.
 
 ## Defensive Analysis
 

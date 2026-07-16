@@ -9,13 +9,16 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pion/webrtc/v3"
 
@@ -59,7 +62,10 @@ func main() {
 		}
 	}()
 
-	httpClient := &http.Client{Timeout: *requestTimeout}
+	httpClient, err := newBoundedHTTPClient(targetURL, *requestTimeout)
+	if err != nil {
+		log.Fatalf("create target HTTP client: %v", err)
+	}
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("ICE connection state: %s", state.String())
@@ -126,6 +132,33 @@ func main() {
 	<-ctx.Done()
 }
 
+func newBoundedHTTPClient(target *url.URL, timeout time.Duration) (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &http.Client{
+		Timeout: timeout,
+		Jar:     jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("stopped after %d redirects", len(via))
+			}
+			if !redirectAllowed(target, req.URL) {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}, nil
+}
+
+func redirectAllowed(target, redirectURL *url.URL) bool {
+	if redirectURL == nil {
+		return false
+	}
+	return sameTargetOrigin(target, redirectURL) && withinTargetBasePath(target, redirectURL.Path)
+}
 func parseTarget(raw string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -185,9 +218,7 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		sendRelayResponse(d, errorResponse(relayReq.ID, "build target request failed"))
 		return
 	}
-	req.Header.Set("User-Agent", "snowflake-inspired-webrtc-proxy-lab/1.0")
-	req.Header.Set("X-WebRTC-Proxy-Lab", "true")
-	req.Header.Set("X-Proxy-Request-ID", relayReq.ID)
+	applyRelayRequestHeaders(req, relayReq)
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "text/plain")
 	}
@@ -215,24 +246,96 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		bodyBytes = bodyBytes[:limit]
 	}
 
-	preview := responsePreview(bodyBytes, truncated)
+	responseBody, bodyFormat := relayResponseBody(bodyBytes, resp.Header.Get("Content-Type"))
+	preview := responsePreview(bodyBytes, truncated, bodyFormat)
 
+	finalURL := requestURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+	}
 	sendRelayResponse(d, lab.RelayResponse{
 		Type:        lab.RelayResponseType,
 		ID:          relayReq.ID,
 		Status:      resp.StatusCode,
-		Target:      requestURL,
+		Target:      finalURL,
 		Bytes:       len(bodyBytes),
 		ContentType: resp.Header.Get("Content-Type"),
-		Body:        string(bodyBytes),
+		Headers:     selectedResponseHeaders(resp.Header),
+		BodyFormat:  bodyFormat,
+		Body:        responseBody,
 		BodyPreview: preview,
 		Truncated:   truncated,
 		Time:        time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
-func responsePreview(body []byte, bodyTruncated bool) string {
+func applyRelayRequestHeaders(req *http.Request, relayReq lab.RelayRequest) {
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; snowflake-webrtc-proxy-lab/1.1)")
+	req.Header.Set("Accept", allowedRequestHeader(relayReq.Headers, "Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"))
+	req.Header.Set("Accept-Language", allowedRequestHeader(relayReq.Headers, "Accept-Language", "en-US,en;q=0.9"))
+	req.Header.Set("X-WebRTC-Proxy-Lab", "true")
+	req.Header.Set("X-Proxy-Request-ID", relayReq.ID)
+}
+
+func allowedRequestHeader(headers map[string]string, name, fallback string) string {
+	if headers == nil {
+		return fallback
+	}
+	for key, value := range headers {
+		if strings.EqualFold(strings.TrimSpace(key), name) {
+			value = strings.TrimSpace(value)
+			if value != "" && !strings.ContainsAny(value, "\r\n") {
+				return value
+			}
+		}
+	}
+	return fallback
+}
+
+func selectedResponseHeaders(headers http.Header) map[string]string {
+	out := make(map[string]string)
+	for _, name := range []string{"Cache-Control", "Content-Language", "Content-Type", "ETag", "Last-Modified", "Location"} {
+		if value := headers.Get(name); value != "" {
+			out[strings.ToLower(name)] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func relayResponseBody(body []byte, contentType string) (string, string) {
+	if shouldTreatBodyAsText(body, contentType) {
+		return string(body), "text"
+	}
+	return base64.StdEncoding.EncodeToString(body), "base64"
+}
+
+func shouldTreatBodyAsText(body []byte, contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err == nil {
+		mediaType = strings.ToLower(mediaType)
+		if strings.HasPrefix(mediaType, "text/") {
+			return true
+		}
+		switch mediaType {
+		case "application/ecmascript", "application/javascript", "application/json", "application/manifest+json", "application/rss+xml", "application/x-javascript", "application/xhtml+xml", "application/xml", "image/svg+xml":
+			return true
+		}
+	}
+	return contentType == "" && utf8.Valid(body)
+}
+
+func responsePreview(body []byte, bodyTruncated bool, bodyFormat string) string {
 	const previewLimit = 512
+	if bodyFormat == "base64" {
+		out := fmt.Sprintf("[binary response body: %d bytes]", len(body))
+		if bodyTruncated {
+			out += "...[body truncated]"
+		}
+		return out
+	}
 
 	preview := body
 	if len(preview) > previewLimit {
@@ -265,18 +368,31 @@ func boundedTargetURL(target *url.URL, requestPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid request path")
 	}
-	if relative.IsAbs() || relative.Host != "" {
+	if relative.IsAbs() || relative.Host != "" || relative.Scheme != "" {
 		return "", fmt.Errorf("client may only request relative paths")
-	}
-	if hasParentPathSegment(relative.Path) {
-		return "", fmt.Errorf("request path must not contain parent-directory segments")
 	}
 
 	out := *target
 	out.Path = joinTargetPath(target.Path, relative.Path)
 	out.RawQuery = relative.RawQuery
 	out.Fragment = ""
+
+	if hasParentPathSegment(out.Path) || !withinTargetBasePath(target, out.Path) {
+		return "", fmt.Errorf("request path must not contain parent-directory segments")
+	}
 	return out.String(), nil
+}
+
+func sameTargetOrigin(target, candidate *url.URL) bool {
+	return strings.EqualFold(candidate.Scheme, target.Scheme) && strings.EqualFold(candidate.Host, target.Host)
+}
+
+func withinTargetBasePath(target *url.URL, candidatePath string) bool {
+	basePath := strings.TrimRight(target.Path, "/")
+	if basePath == "" {
+		return true
+	}
+	return candidatePath == basePath || strings.HasPrefix(candidatePath, basePath+"/")
 }
 
 func joinTargetPath(basePath, requestPath string) string {
