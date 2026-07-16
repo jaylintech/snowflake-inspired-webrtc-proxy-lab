@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 .gocache/
 .gomodcache/
+.env
+*.key
+*.pcap
+*.pcapng
+testbed/**/*.pem
+testbed/**/private/
+captures/

@@ -6,14 +6,20 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
 type pageData struct {
-	BrokerURL template.JS
-	Session   template.JS
-	Stun      template.JS
-	TargetURL template.JS
+	BrokerURL      template.JS
+	Session        template.JS
+	Stun           template.JS
+	TargetURL      template.JS
+	TURNURLs       template.JS
+	TURNUsername   template.JS
+	TURNCredential template.JS
+	ICEPolicy      template.JS
+	BrokerToken    template.JS
 }
 
 func main() {
@@ -26,10 +32,15 @@ func main() {
 
 	tmpl := template.Must(template.New("browserui").Parse(browserPage))
 	data := pageData{
-		BrokerURL: jsString(*brokerURL),
-		Session:   jsString(*sessionID),
-		Stun:      jsString(*stunServers),
-		TargetURL: jsString(*targetURL),
+		BrokerURL:      jsString(*brokerURL),
+		Session:        jsString(*sessionID),
+		Stun:           jsString(*stunServers),
+		TargetURL:      jsString(*targetURL),
+		TURNURLs:       jsString(os.Getenv("LAB_TURN_URLS")),
+		TURNUsername:   jsString(os.Getenv("LAB_TURN_USERNAME")),
+		TURNCredential: jsString(os.Getenv("LAB_TURN_CREDENTIAL")),
+		ICEPolicy:      jsString(os.Getenv("LAB_ICE_POLICY")),
+		BrokerToken:    jsString(os.Getenv("LAB_BROKER_TOKEN")),
 	}
 
 	mux := http.NewServeMux()
@@ -331,7 +342,12 @@ const browserPage = `<!doctype html>
       brokerUrl: {{ .BrokerURL }},
       session: {{ .Session }},
       stun: {{ .Stun }},
-      targetUrl: {{ .TargetURL }}
+      targetUrl: {{ .TargetURL }},
+      turnUrls: {{ .TURNURLs }},
+      turnUsername: {{ .TURNUsername }},
+      turnCredential: {{ .TURNCredential }},
+      icePolicy: {{ .ICEPolicy }},
+      brokerToken: {{ .BrokerToken }}
     };
     const requestType = "LAB_PROXY_REQUEST";
     const responseChunkType = "LAB_PROXY_RESPONSE_CHUNK";
@@ -387,10 +403,21 @@ const browserPage = `<!doctype html>
     }
 
     function iceServers() {
-      const urls = stunInput.value.split(",").map(function (part) {
+      const stunUrls = stunInput.value.split(",").map(function (part) {
         return part.trim();
       }).filter(Boolean);
-      return urls.length ? [{ urls: urls }] : [];
+      const servers = stunUrls.length ? [{ urls: stunUrls }] : [];
+      const turnUrls = String(config.turnUrls || "").split(",").map(function (part) {
+        return part.trim();
+      }).filter(Boolean);
+      if (turnUrls.length) {
+        servers.push({
+          urls: turnUrls,
+          username: config.turnUsername || "",
+          credential: config.turnCredential || ""
+        });
+      }
+      return servers;
     }
 
     async function connect() {
@@ -400,7 +427,7 @@ const browserPage = `<!doctype html>
       logLine("creating browser RTCPeerConnection");
 
       try {
-        peer = new RTCPeerConnection({ iceServers: iceServers() });
+        peer = new RTCPeerConnection({ iceServers: iceServers(), iceTransportPolicy: config.icePolicy === "relay" ? "relay" : "all" });
         peer.addEventListener("iceconnectionstatechange", function () {
           logLine("ICE connection state: " + peer.iceConnectionState);
           if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
@@ -498,10 +525,21 @@ const browserPage = `<!doctype html>
       });
     }
 
+    function signalHeaders(includeContentType) {
+      const headers = {};
+      if (includeContentType) {
+        headers["Content-Type"] = "application/json";
+      }
+      if (config.brokerToken) {
+        headers.Authorization = "Bearer " + config.brokerToken;
+      }
+      return headers;
+    }
+
     async function postSignal(kind, description) {
       const response = await fetch(signalURL(kind), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: signalHeaders(true),
         body: JSON.stringify({ type: description.type, sdp: description.sdp })
       });
       if (!response.ok) {
@@ -512,7 +550,7 @@ const browserPage = `<!doctype html>
     async function pollSignal(kind, timeoutMs) {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
-        const response = await fetch(signalURL(kind), { method: "GET" });
+        const response = await fetch(signalURL(kind), { method: "GET", headers: signalHeaders(false) });
         if (response.status === 200) {
           return response.json();
         }

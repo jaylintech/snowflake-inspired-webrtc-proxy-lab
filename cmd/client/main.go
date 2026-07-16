@@ -42,7 +42,7 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnection(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
+	pc, err := lab.NewPeerConnectionWithOptions(lab.PeerConnectionOptionsFromEnvironment(*stunServers, *icePortMin, *icePortMax, *advertiseIP))
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}
@@ -54,6 +54,13 @@ func main() {
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("ICE connection state: %s", state.String())
+		if state == webrtc.ICEConnectionStateConnected || state == webrtc.ICEConnectionStateCompleted {
+			if pair, err := lab.SelectedCandidatePair(pc); err != nil {
+				log.Printf("selected ICE candidate pair unavailable: %v", err)
+			} else {
+				log.Printf("selected ICE candidate pair: %s", pair)
+			}
+		}
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("peer connection state: %s", state.String())
