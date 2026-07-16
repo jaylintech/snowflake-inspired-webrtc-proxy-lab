@@ -2,6 +2,8 @@
 
 Controlled proof of concept for testing how DNS filters, content filters, firewalls, and monitoring tools observe a bounded WebRTC proxy path.
 
+> **Authorized lab use only.** Use this project only with systems and networks you own or are explicitly authorized to test. Build the binaries from the reviewable source in this repository; do not use this project to evade controls on third-party networks.
+
 The lab compares direct client access to a destination with access through a WebRTC DataChannel proxy host:
 
 ```text
@@ -26,14 +28,19 @@ This project is a defensive network-behavior lab. It is intentionally bounded:
 - Proxy mode allows only `GET` and `POST`.
 - Targets must be owned or explicitly authorized for testing.
 - The project does not implement command execution, persistence, credential access, file collection, process hiding, or an open proxy.
+- The optional beacon/task path emits labeled synthetic detection signals only; it does not inspect the host or upload host data.
 
 ## Components
 
 - `cmd/broker`: HTTP SDP offer/answer signaling service.
+- `cmd/client`: synthetic detection-signal client. It emits labeled hello/beacon messages with configurable interval and jitter, then returns simulated task results and generated `X`-byte chunks.
+- `cmd/listener`: synthetic detection-signal peer. It acknowledges beacons and can request the fixed simulated actions `sleep`, `inventory`, and `synthetic-upload`; it cannot issue operating-system commands.
 - `cmd/relay`: bounded WebRTC proxy implementation. User-facing scripts expose it as `proxy`.
 - `cmd/webclient`: CLI client that sends synthetic requests over the DataChannel.
 - `cmd/browserui`: local browser-based viewer that creates the WebRTC DataChannel from the browser and renders sanitized responses.
 - `cmd/target`: controlled HTTP target for local verification.
+
+The `client`/`listener` pair is separate from the bounded relay/viewer path. It exists so EDR, NDR, IDS, and flow-analysis experiments have an intentionally beacon-shaped but harmless signal to observe. The inventory response is a constant synthetic string, and `synthetic-upload` generates its payload in memory rather than reading files.
 
 ## Build
 
@@ -84,7 +91,7 @@ Success indicators:
 
 ## Browser Viewer
 
-The browser viewer provides a lightweight "browser within a browser" experience while keeping the same bounded proxy path. It renders sanitized HTML, follows same-origin links under the configured target, and can fetch same-origin CSS/images through the DataChannel. Scripts, forms, frames, cross-site resources, and direct target-site subresource loads remain disabled.
+The browser viewer provides a lightweight "browser within a browser" experience while keeping the same bounded proxy path. It renders sanitized HTML, follows same-origin links under the configured target, and can fetch same-origin CSS/images through the DataChannel. Scripts, forms, frames, cross-site resources, and direct target-site subresource loads remain disabled. Its client-side sanitizer is a conservative lab control, not a security boundary or a substitute for a server-side allowlist and browser isolation.
 
 Proxy-server side:
 
@@ -163,3 +170,12 @@ Compare these views during a test:
 - Endpoint tools: unusual standalone WebRTC/DataChannel process behavior.
 
 Use only in owned or explicitly authorized environments.
+
+## Reproducible Research Snapshots
+
+- [`v0.1-part1`](https://github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/tree/v0.1-part1) preserves the repository state associated with Part 1 of the research series.
+- Later measurement work remains in this repository so the code, evidence, and article history stay connected; stable phases receive their own tags.
+
+## License
+
+Licensed under the [MIT License](LICENSE).

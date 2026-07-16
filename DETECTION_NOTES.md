@@ -11,6 +11,8 @@ Common reasons for detections:
 - PowerShell wrapper scripts downloaded from the internet.
 - Direct execution from a downloads folder or temporary path.
 
+The `cmd/client` and `cmd/listener` binaries deliberately generate a benign, beacon-shaped detection signal. The client sends labeled `LAB_HELLO` and jittered `LAB_BEACON` messages. The listener can request only the fixed simulated actions `sleep`, `inventory`, and `synthetic-upload`. The inventory text is hard-coded test data, and upload chunks are generated from repeated `X` characters; neither component executes commands, inventories the real host, nor reads files for upload.
+
 The PoC is intentionally bounded:
 
 - It only connects to the configured `-TargetUrl`.
