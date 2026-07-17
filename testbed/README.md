@@ -37,10 +37,13 @@ Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:
 - Use synthetic identities and content only.
 - Keep raw evidence outside the repository and commit hashes plus sanitized summaries.
 
-## Planned Config Layout
+## Implemented Testbed
 
-- `turn/`: sanitized TURN server templates and certificate expectations.
-- `tls-inspection/`: proxy-specific templates and CA-install/cleanup notes.
-- `sensors/`: capture placement and Suricata/Zeek loading instructions.
+- `compose.yaml`: pinned Coturn and mitmproxy services.
+- `.env.example`: non-secret version and configuration template.
+- `RUNBOOK.md`: certificate, startup, baseline, TURN, capture, analysis, and cleanup procedure.
+- `scripts/capture-part2.ps1`: time-bounded dumpcap capture with SHA-256 manifest.
+- `scripts/analyze-pcap.ps1`: network-disabled offline Suricata and Zeek execution.
+- `scripts/test-config.ps1`: preflight validation for secrets, certificates, and Compose rendering.
 
-Templates will be added only after the selected lab products and versions are recorded.
+The local mitmproxy service is an explicit HTTP(S) proxy baseline. It is not represented as an inline TURN or DTLS interception appliance.

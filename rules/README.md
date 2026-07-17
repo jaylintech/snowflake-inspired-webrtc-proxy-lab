@@ -14,3 +14,9 @@ Rules are intentionally not pre-populated from assumptions. A rule belongs here 
 6. Avoid payload signatures for synthetic strings unless the test explicitly measures decrypted or endpoint-visible content.
 
 Raw PCAP files and secrets must not be committed.
+
+## Offline Harness
+
+Run `testbed/scripts/analyze-pcap.ps1` to produce versioned Suricata and Zeek output with container networking disabled. The harness uses pinned defaults but accepts explicit image overrides.
+
+No custom rule file is loaded unless `-SuricataRules` is supplied. This keeps baseline analyzer output separate from experimental signatures.

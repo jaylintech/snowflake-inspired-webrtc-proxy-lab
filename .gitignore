@@ -3,10 +3,12 @@ __pycache__/
 *.pyc
 .gocache/
 .gomodcache/
+.docker-codex/
 .env
 *.key
 *.pcap
 *.pcapng
 testbed/**/*.pem
 testbed/**/private/
+testbed/private/
 captures/

@@ -18,6 +18,7 @@ Additional documentation:
 - [REMOTE_TEST.md](REMOTE_TEST.md): off-LAN remote proxy host test guide
 - [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
 - [FINDINGS_PART2.md](FINDINGS_PART2.md): in-progress TURN, TLS-inspection, and detectability measurements
+- [testbed/RUNBOOK.md](testbed/RUNBOOK.md): reproducible Coturn, TLS-inspection baseline, capture, and offline analysis procedure
 - [DETECTION_NOTES.md](DETECTION_NOTES.md): why endpoint tools may flag the lab and how to handle that transparently
 
 ## Scope
@@ -154,7 +155,7 @@ Expected observation:
 
 ## Part 2 Measurement Setup
 
-Part 2 stays in this repository and extends the same bounded relay/viewer. See [testbed/README.md](testbed/README.md) for the TURN and broker environment, [FINDINGS_PART2.md](FINDINGS_PART2.md) for evidence requirements, and [artifacts/controls-matrix-part2.md](artifacts/controls-matrix-part2.md) for the cross-control results.
+Part 2 stays in this repository and extends the same bounded relay/viewer. See [testbed/RUNBOOK.md](testbed/RUNBOOK.md) for the controlled services and evidence workflow, [FINDINGS_PART2.md](FINDINGS_PART2.md) for evidence requirements, and [artifacts/controls-matrix-part2.md](artifacts/controls-matrix-part2.md) for the cross-control results.
 
 - TURN settings: `LAB_TURN_URLS`, `LAB_TURN_USERNAME`, and `LAB_TURN_CREDENTIAL`.
 - Set `LAB_ICE_POLICY=relay` only for test cases that must force TURN.

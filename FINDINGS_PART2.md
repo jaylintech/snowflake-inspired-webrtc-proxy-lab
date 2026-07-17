@@ -4,6 +4,16 @@ Status: measurement in progress. No result in this document is a finding until i
 
 Part 2 extends the same bounded broker/relay/browser-viewer lab used in Part 1. It measures where TLS inspection can observe or alter each connection leg and what STUN, TURN, DTLS, and flow telemetry remain visible to defenders. It does not widen the relay beyond its configured authorized target.
 
+## Measurement Scaffold (2026-07-16)
+
+The reproducible local scaffold is documented in [testbed/RUNBOOK.md](testbed/RUNBOOK.md) and pins:
+
+- Coturn `4.12.0` with temporary long-term credentials, an explicit allowed-peer IP/range, loopback host bindings by default, and a reduced relay port range.
+- mitmproxy `12.2.3` in explicit regular-proxy mode for the ordinary HTTPS inspection baseline.
+- Suricata `8.0.5` and Zeek `8.0.8` for network-disabled offline PCAP analysis.
+
+The service configuration and offline analyzer harness passed local smoke validation. That validation establishes testbed operability only; it is not a P2-A through P2-F measurement and does not change the `Not run` statuses below. In particular, the explicit mitmproxy baseline is not an inline TURN or DTLS inspection path.
+
 ## Questions
 
 1. Does the DataChannel connect directly over UDP when the client trusts an HTTPS inspection CA?

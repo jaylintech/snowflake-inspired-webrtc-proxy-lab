@@ -1,0 +1,64 @@
+name: snowflake-part2-testbed
+
+services:
+  turn:
+    image: ${COTURN_IMAGE:?Set COTURN_IMAGE in testbed/.env}
+    restart: "no"
+    command:
+      - -n
+      - --realm=${TURN_REALM:?Set TURN_REALM in testbed/.env}
+      - --lt-cred-mech
+      - --user=${TURN_USERNAME:?Set TURN_USERNAME in testbed/.env}:${TURN_PASSWORD:?Set TURN_PASSWORD in testbed/.env}
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --min-port=49160
+      - --max-port=49200
+      - --cert=/run/turn-certs/turn-cert.pem
+      - --pkey=/run/turn-certs/turn-key.pem
+      - --allowed-peer-ip=${TURN_ALLOWED_PEER_IP:?Set TURN_ALLOWED_PEER_IP in testbed/.env}
+      - --no-multicast-peers
+      - --stale-nonce=300
+    ports:
+      - "${TURN_BIND_IP:-127.0.0.1}:3478:3478/tcp"
+      - "${TURN_BIND_IP:-127.0.0.1}:3478:3478/udp"
+      - "${TURN_BIND_IP:-127.0.0.1}:${TURN_TLS_HOST_PORT:-443}:5349/tcp"
+      - "${TURN_BIND_IP:-127.0.0.1}:49160-49200:49160-49200/udp"
+    volumes:
+      - type: bind
+        source: ${TURN_CERT_DIR:?Set TURN_CERT_DIR in testbed/.env}
+        target: /run/turn-certs
+        read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lib/coturn
+    security_opt:
+      - no-new-privileges:true
+
+  tls-inspection:
+    image: ${MITMPROXY_IMAGE:?Set MITMPROXY_IMAGE in testbed/.env}
+    restart: "no"
+    command:
+      - mitmdump
+      - --mode
+      - regular
+      - --listen-host
+      - 0.0.0.0
+      - --listen-port
+      - "8081"
+      - --set
+      - confdir=/home/mitmproxy/.mitmproxy
+      - --set
+      - block_global=false
+      - --save-stream-file
+      - /evidence/flows.mitm
+    ports:
+      - "127.0.0.1:${MITMPROXY_HOST_PORT:-8081}:8081/tcp"
+    volumes:
+      - type: bind
+        source: ./private/mitmproxy
+        target: /home/mitmproxy/.mitmproxy
+      - type: bind
+        source: ../captures/mitmproxy
+        target: /evidence
+    security_opt:
+      - no-new-privileges:true
