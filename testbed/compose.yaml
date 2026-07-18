@@ -15,6 +15,9 @@ services:
       - --max-port=49200
       - --cert=/run/turn-certs/turn-cert.pem
       - --pkey=/run/turn-certs/turn-key.pem
+      - --external-ip=${TURN_EXTERNAL_IP:?Set TURN_EXTERNAL_IP in testbed/.env}
+      - --denied-peer-ip=0.0.0.0-255.255.255.255
+      - --denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
       - --allowed-peer-ip=${TURN_ALLOWED_PEER_IP:?Set TURN_ALLOWED_PEER_IP in testbed/.env}
       - --no-multicast-peers
       - --stale-nonce=300

@@ -7,7 +7,8 @@ This runbook creates a local, explicitly configured baseline. It does not claim 
 From the repository root:
 
 ```powershell
-go run ./cmd/labcert -out testbed/private/turn -dns turn.lab.example -ip 127.0.0.1 -valid-for 168h
+$TurnHostIP = "192.0.2.10" # Replace with the owned TURN host's reachable IPv4 address.
+go run ./cmd/labcert -out testbed/private/turn -dns turn.lab.example -ip $TurnHostIP -valid-for 168h
 ```
 
 The generator refuses to overwrite files unless `-force` is provided. The output directory and all PEM files are ignored by Git. It creates a temporary CA certificate, TURN server certificate, and TURN private key; it does not install trust automatically.
@@ -20,7 +21,7 @@ For `turns:` tests, trust `testbed/private/turn/ca-cert.pem` only in the owned t
 Copy-Item testbed/.env.example testbed/.env
 ```
 
-Replace every `CHANGE_ME`. `TURN_ALLOWED_PEER_IP` must be the authorized WebRTC peer IP or range for this run; this prevents the local TURN service from relaying to arbitrary peers.
+Replace every `CHANGE_ME`. For a two-host run, set `TURN_BIND_IP` to the owned LAN interface and `TURN_EXTERNAL_IP` to the reachable IPv4 address advertised in relay candidates. The Compose file denies all other IPv4 and IPv6 relay destinations, while `TURN_ALLOWED_PEER_IP` explicitly permits the required destination; when both forced-relay peers use this TURN server, that destination is normally `TURN_EXTERNAL_IP`. This value restricts where allocations may relay traffic, not which clients may authenticate.
 
 Validate without starting containers:
 
@@ -40,6 +41,7 @@ The testbed exposes:
 - TURN UDP/TCP on `3478`.
 - TURN TLS/TCP on host port `443`, mapped to Coturn `5349`.
 - A restricted TURN relay allocation range of UDP `49160-49200`.
+- Default-deny IPv4 and IPv6 relay-destination rules with one explicit allowed IP or range.
 - mitmproxy regular HTTP(S) proxy on loopback `127.0.0.1:8081`.
 
 ## 4. Establish the HTTPS-Bump Baseline
@@ -63,7 +65,8 @@ Set the same values on both WebRTC peers.
 TURN UDP:
 
 ```powershell
-$env:LAB_TURN_URLS = "turn:127.0.0.1:3478?transport=udp"
+$TurnHostIP = "192.0.2.10" # Same address as TURN_EXTERNAL_IP.
+$env:LAB_TURN_URLS = "turn:${TurnHostIP}:3478?transport=udp"
 $env:LAB_TURN_USERNAME = "<value from testbed/.env>"
 $env:LAB_TURN_CREDENTIAL = "<value from testbed/.env>"
 $env:LAB_ICE_POLICY = "relay"
@@ -72,7 +75,7 @@ $env:LAB_ICE_POLICY = "relay"
 TURN TLS/TCP 443:
 
 ```powershell
-$env:LAB_TURN_URLS = "turns:127.0.0.1:443?transport=tcp"
+$env:LAB_TURN_URLS = "turns:turn.lab.example:443?transport=tcp"
 $env:LAB_TURN_USERNAME = "<value from testbed/.env>"
 $env:LAB_TURN_CREDENTIAL = "<value from testbed/.env>"
 $env:LAB_ICE_POLICY = "relay"

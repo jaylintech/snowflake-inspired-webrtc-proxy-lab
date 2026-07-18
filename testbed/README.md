@@ -31,6 +31,7 @@ Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:
 ## Testbed Rules
 
 - Keep the relay configured to one owned or explicitly authorized target.
+- Keep Coturn's default-deny peer rules enabled and allow only the remote relay-candidate IP or range needed by the run.
 - Record the selected ICE candidate pair; forced relay must be verified, not assumed.
 - Establish an ordinary HTTPS bump baseline before testing WebRTC/TURN.
 - Capture on clearly named legs and synchronize clocks.

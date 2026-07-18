@@ -18,10 +18,25 @@ foreach ($line in Get-Content -LiteralPath $envPath) {
     }
 }
 
-$required = @("TURN_REALM", "TURN_USERNAME", "TURN_PASSWORD", "TURN_ALLOWED_PEER_IP", "TURN_CERT_DIR")
+$required = @("TURN_REALM", "TURN_BIND_IP", "TURN_EXTERNAL_IP", "TURN_USERNAME", "TURN_PASSWORD", "TURN_ALLOWED_PEER_IP", "TURN_CERT_DIR")
 foreach ($name in $required) {
     if (-not $values.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($values[$name]) -or $values[$name] -eq "CHANGE_ME") {
         throw "Missing or placeholder required value $name in $envPath"
+    }
+}
+
+foreach ($name in @("TURN_BIND_IP", "TURN_EXTERNAL_IP")) {
+    $address = $null
+    if (-not [Net.IPAddress]::TryParse($values[$name], [ref]$address) -or $address.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
+        throw "$name must be a literal IPv4 address in $envPath"
+    }
+}
+
+$peerRange = $values["TURN_ALLOWED_PEER_IP"].Split("-", 2)
+foreach ($rawAddress in $peerRange) {
+    $address = $null
+    if (-not [Net.IPAddress]::TryParse($rawAddress, [ref]$address)) {
+        throw "TURN_ALLOWED_PEER_IP must be a literal IP address or IP range in $envPath"
     }
 }
 

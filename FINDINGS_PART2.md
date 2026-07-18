@@ -8,7 +8,7 @@ Part 2 extends the same bounded broker/relay/browser-viewer lab used in Part 1. 
 
 The reproducible local scaffold is documented in [testbed/RUNBOOK.md](testbed/RUNBOOK.md) and pins:
 
-- Coturn `4.12.0` with temporary long-term credentials, an explicit allowed-peer IP/range, loopback host bindings by default, and a reduced relay port range.
+- Coturn `4.12.0` with temporary long-term credentials, an advertised relay IP, default-deny IPv4/IPv6 peer rules, one explicit allowed-peer IP/range, loopback host bindings by default, and a reduced relay port range.
 - mitmproxy `12.2.3` in explicit regular-proxy mode for the ordinary HTTPS inspection baseline.
 - Suricata `8.0.5` and Zeek `8.0.8` for network-disabled offline PCAP analysis.
 
