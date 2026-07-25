@@ -17,6 +17,8 @@ Additional documentation:
 - [GUIDE.md](GUIDE.md): runbook and verification steps
 - [REMOTE_TEST.md](REMOTE_TEST.md): off-LAN remote proxy host test guide
 - [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
+- [FINDINGS_PART2.md](FINDINGS_PART2.md): in-progress TURN, TLS-inspection, and detectability measurements
+- [testbed/RUNBOOK.md](testbed/RUNBOOK.md): reproducible Coturn, TLS-inspection baseline, capture, and offline analysis procedure
 - [DETECTION_NOTES.md](DETECTION_NOTES.md): why endpoint tools may flag the lab and how to handle that transparently
 
 ## Scope
@@ -149,7 +151,15 @@ Expected observation:
 - If the remote firewall shows UDP checks to private addresses such as `192.168.x.x` or `172.16.x.x`, the proxy is advertising private ICE candidates instead of the public IP.
 - A successful off-LAN router test used TCP `8080`, UDP `40000`, and `-AdvertiseIP`; see [FINDINGS.md](FINDINGS.md) and [REMOTE_TEST.md](REMOTE_TEST.md).
 - If signaling succeeds but ICE never connects, UDP/NAT traversal is the likely failure point.
-- TURN is the normal fallback for WebRTC paths where direct UDP cannot connect; this PoC does not bundle TURN.
+- TURN is the normal fallback where direct UDP cannot connect. The peers support an externally managed TURN service through lab environment variables; this repository does not bundle or expose a public TURN server.
+
+## Part 2 Measurement Setup
+
+Part 2 stays in this repository and extends the same bounded relay/viewer. See [testbed/RUNBOOK.md](testbed/RUNBOOK.md) for the controlled services and evidence workflow, [FINDINGS_PART2.md](FINDINGS_PART2.md) for evidence requirements, and [artifacts/controls-matrix-part2.md](artifacts/controls-matrix-part2.md) for the cross-control results.
+
+- TURN settings: `LAB_TURN_URLS`, `LAB_TURN_USERNAME`, and `LAB_TURN_CREDENTIAL`.
+- Set `LAB_ICE_POLICY=relay` only for test cases that must force TURN.
+- Set `LAB_BROKER_TOKEN` on the broker and peers to protect signaling; broker sessions expire after 15 minutes by default.
 
 ## PoC Artifacts
 

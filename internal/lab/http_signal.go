@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
 
-func PutSignal(ctx context.Context, brokerURL, sessionID, kind string, payload Signal) error {
+func PutSignal(ctx context.Context, brokerURL, sessionID, kind string, payload Signal, brokerToken ...string) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal %s signal: %w", kind, err)
@@ -22,6 +23,7 @@ func PutSignal(ctx context.Context, brokerURL, sessionID, kind string, payload S
 		return fmt.Errorf("build %s request: %w", kind, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	setBearerToken(req, brokerToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -36,11 +38,12 @@ func PutSignal(ctx context.Context, brokerURL, sessionID, kind string, payload S
 	return nil
 }
 
-func GetSignal(ctx context.Context, brokerURL, sessionID, kind string) (Signal, bool, error) {
+func GetSignal(ctx context.Context, brokerURL, sessionID, kind string, brokerToken ...string) (Signal, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signalURL(brokerURL, sessionID, kind), nil)
 	if err != nil {
 		return Signal{}, false, fmt.Errorf("build %s request: %w", kind, err)
 	}
+	setBearerToken(req, brokerToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -64,7 +67,7 @@ func GetSignal(ctx context.Context, brokerURL, sessionID, kind string) (Signal, 
 	return payload, true, nil
 }
 
-func PollSignal(ctx context.Context, brokerURL, sessionID, kind string, interval time.Duration) (Signal, error) {
+func PollSignal(ctx context.Context, brokerURL, sessionID, kind string, interval time.Duration, brokerToken ...string) (Signal, error) {
 	if interval <= 0 {
 		interval = time.Second
 	}
@@ -73,7 +76,7 @@ func PollSignal(ctx context.Context, brokerURL, sessionID, kind string, interval
 	defer ticker.Stop()
 
 	for {
-		payload, ok, err := GetSignal(ctx, brokerURL, sessionID, kind)
+		payload, ok, err := GetSignal(ctx, brokerURL, sessionID, kind, brokerToken...)
 		if err != nil {
 			return Signal{}, err
 		}
@@ -86,6 +89,16 @@ func PollSignal(ctx context.Context, brokerURL, sessionID, kind string, interval
 			return Signal{}, ctx.Err()
 		case <-ticker.C:
 		}
+	}
+}
+
+func setBearerToken(req *http.Request, tokenValues []string) {
+	token := strings.TrimSpace(os.Getenv("LAB_BROKER_TOKEN"))
+	if len(tokenValues) > 0 {
+		token = strings.TrimSpace(tokenValues[0])
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 }
 
