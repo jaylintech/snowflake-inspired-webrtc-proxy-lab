@@ -17,6 +17,6 @@ Raw PCAP files and secrets must not be committed.
 
 ## Offline Harness
 
-Run `testbed/scripts/analyze-pcap.ps1` to produce versioned Suricata and Zeek output with container networking disabled. The harness uses pinned defaults but accepts explicit image overrides.
+Run `testbed/scripts/analyze-pcap.ps1` to produce versioned Suricata and Zeek output with container networking disabled. The harness uses pinned defaults but accepts explicit image overrides, and its manifest records local image IDs plus available repository digests.
 
 No custom rule file is loaded unless `-SuricataRules` is supplied. This keeps baseline analyzer output separate from experimental signatures.

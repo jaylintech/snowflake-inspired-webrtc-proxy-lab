@@ -8,6 +8,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-DockerImageEvidence {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Reference
+    )
+
+    $rawMetadata = & docker image inspect $Reference
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not inspect Docker image $Reference"
+    }
+    $metadataItems = @($rawMetadata | ConvertFrom-Json)
+    if ($metadataItems.Count -eq 0) {
+        throw "Docker returned no metadata for image $Reference"
+    }
+    $metadata = $metadataItems[0]
+    return [ordered]@{
+        reference = $Reference
+        id = [string]$metadata.Id
+        repo_digests = @($metadata.RepoDigests)
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $pcapPath = (Resolve-Path $Pcap).Path
 if (-not [IO.Path]::IsPathRooted($OutputRoot)) {
@@ -57,14 +80,16 @@ if ($LASTEXITCODE -ne 0) {
     throw "Zeek analysis failed with exit code $LASTEXITCODE"
 }
 
+$suricataImageEvidence = Get-DockerImageEvidence -Reference $SuricataImage
+$zeekImageEvidence = Get-DockerImageEvidence -Reference $ZeekImage
 $manifest = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     analyzed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
     git_commit = (git -C $repoRoot rev-parse HEAD).Trim()
     pcap_file = $pcapName
     pcap_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pcapPath).Hash.ToLowerInvariant()
-    suricata_image = $SuricataImage
-    zeek_image = $ZeekImage
+    suricata_image = $suricataImageEvidence
+    zeek_image = $zeekImageEvidence
     custom_suricata_rules = if ($SuricataRules) { (Split-Path $SuricataRules -Leaf) } else { $null }
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory "analysis-manifest.json") -Encoding UTF8

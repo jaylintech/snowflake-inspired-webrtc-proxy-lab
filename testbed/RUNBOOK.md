@@ -8,12 +8,15 @@ From the repository root:
 
 ```powershell
 $TurnHostIP = "192.0.2.10" # Replace with the owned TURN host's reachable IPv4 address.
-go run ./cmd/labcert -out testbed/private/turn -dns turn.lab.example -ip $TurnHostIP -valid-for 168h
+$TurnTLSName = "turn.lab.example"
+go run ./cmd/labcert -out testbed/private/turn -dns $TurnTLSName -ip $TurnHostIP -valid-for 168h
 ```
 
 The generator refuses to overwrite files unless `-force` is provided. The output directory and all PEM files are ignored by Git. It creates a temporary CA certificate, TURN server certificate, and TURN private key; it does not install trust automatically.
 
 For `turns:` tests, trust `testbed/private/turn/ca-cert.pem` only in the owned test endpoint's user trust store. Record the imported certificate thumbprint and remove that exact certificate after the test. Do not distribute or reuse this CA.
+
+The generated server certificate contains both the DNS and IP subject alternative names. The reserved `turn.lab.example` name does not resolve publicly. Use the IP address in `LAB_TURN_URLS`, or add an explicit mapping in controlled DNS or the test endpoint's hosts file and verify that it resolves to `$TurnHostIP` before the run.
 
 ## 2. Configure the Testbed
 
@@ -22,6 +25,8 @@ Copy-Item testbed/.env.example testbed/.env
 ```
 
 Replace every `CHANGE_ME`. For a two-host run, set `TURN_BIND_IP` to the owned LAN interface and `TURN_EXTERNAL_IP` to the reachable IPv4 address advertised in relay candidates. The Compose file denies all other IPv4 and IPv6 relay destinations, while `TURN_ALLOWED_PEER_IP` explicitly permits the required destination; when both forced-relay peers use this TURN server, that destination is normally `TURN_EXTERNAL_IP`. This value restricts where allocations may relay traffic, not which clients may authenticate.
+
+Record `TURN_TLS_HOST_PORT` with the run configuration. The examples below assume its default value of `443`; use the same value in `LAB_TURN_URLS` if the host port is changed.
 
 Validate without starting containers:
 
@@ -39,7 +44,7 @@ docker compose --env-file testbed/.env -f testbed/compose.yaml logs --tail 50 tu
 The testbed exposes:
 
 - TURN UDP/TCP on `3478`.
-- TURN TLS/TCP on host port `443`, mapped to Coturn `5349`.
+- TURN TLS/TCP on the configured `TURN_TLS_HOST_PORT` (default `443`), mapped to Coturn `5349`.
 - A restricted TURN relay allocation range of UDP `49160-49200`.
 - Default-deny IPv4 and IPv6 relay-destination rules with one explicit allowed IP or range.
 - mitmproxy regular HTTP(S) proxy on loopback `127.0.0.1:8081`.
@@ -72,10 +77,12 @@ $env:LAB_TURN_CREDENTIAL = "<value from testbed/.env>"
 $env:LAB_ICE_POLICY = "relay"
 ```
 
-TURN TLS/TCP 443:
+TURN TLS/TCP on the configured host port:
 
 ```powershell
-$env:LAB_TURN_URLS = "turns:turn.lab.example:443?transport=tcp"
+$TurnTLSHost = $TurnHostIP # Or turn.lab.example after controlled name resolution is configured and verified.
+$TurnTLSPort = 443 # Same value as TURN_TLS_HOST_PORT in testbed/.env.
+$env:LAB_TURN_URLS = "turns:${TurnTLSHost}:${TurnTLSPort}?transport=tcp"
 $env:LAB_TURN_USERNAME = "<value from testbed/.env>"
 $env:LAB_TURN_CREDENTIAL = "<value from testbed/.env>"
 $env:LAB_ICE_POLICY = "relay"
@@ -98,7 +105,7 @@ Analyze a completed PCAP without network access inside the sensor containers:
 ./testbed/scripts/analyze-pcap.ps1 -Pcap captures/P2-C-run01/P2-C-run01.pcapng
 ```
 
-The analysis harness writes separate Suricata and Zeek outputs plus an analysis manifest. Supplying `-SuricataRules` is optional and should be used only for capture-derived rules with documented controls.
+The analysis harness writes separate Suricata and Zeek outputs plus an analysis manifest containing each image reference, local image ID, and available repository digests. Supplying `-SuricataRules` is optional and should be used only for capture-derived rules with documented controls.
 
 ## 7. Stop and Clean Up
 

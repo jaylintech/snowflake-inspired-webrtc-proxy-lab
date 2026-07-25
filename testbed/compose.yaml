@@ -3,9 +3,14 @@ name: snowflake-part2-testbed
 services:
   turn:
     image: ${COTURN_IMAGE:?Set COTURN_IMAGE in testbed/.env}
+    # Avoid the image wrapper's shell evaluation of credential-bearing arguments.
+    entrypoint:
+      - turnserver
     restart: "no"
     command:
       - -n
+      - --log-file=stdout
+      - --new-log-timestamp
       - --realm=${TURN_REALM:?Set TURN_REALM in testbed/.env}
       - --lt-cred-mech
       - --user=${TURN_USERNAME:?Set TURN_USERNAME in testbed/.env}:${TURN_PASSWORD:?Set TURN_PASSWORD in testbed/.env}

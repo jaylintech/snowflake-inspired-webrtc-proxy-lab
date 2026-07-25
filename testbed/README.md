@@ -7,7 +7,9 @@ This directory holds sanitized, reusable configuration and procedures for the au
 Set the same TURN values on both peers. `LAB_ICE_POLICY=relay` is required for forced-TURN test cases; leaving it unset or setting it to `all` permits direct candidates.
 
 ```powershell
-$env:LAB_TURN_URLS = "turns:turn.lab.example:443?transport=tcp"
+$TurnTLSHost = "192.0.2.10" # IP SAN from the lab certificate, or a controlled resolvable DNS name.
+$TurnTLSPort = 443 # Same value as TURN_TLS_HOST_PORT in testbed/.env.
+$env:LAB_TURN_URLS = "turns:${TurnTLSHost}:${TurnTLSPort}?transport=tcp"
 $env:LAB_TURN_USERNAME = "temporary-lab-user"
 $env:LAB_TURN_CREDENTIAL = "temporary-lab-password"
 $env:LAB_ICE_POLICY = "relay"
@@ -48,3 +50,5 @@ Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:
 - `scripts/test-config.ps1`: preflight validation for secrets, certificates, and Compose rendering.
 
 The local mitmproxy service is an explicit HTTP(S) proxy baseline. It is not represented as an inline TURN or DTLS interception appliance.
+
+The analyzer manifest records the configured image references together with the local image IDs and available repository digests. Version tags remain useful labels, but the recorded IDs/digests identify the exact analyzer images used for a run.
