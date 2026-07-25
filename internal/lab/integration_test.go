@@ -27,8 +27,8 @@ func newTestBroker() *httptest.Server {
 }
 
 type testSession struct {
-	Offer     *Signal `json:"offer,omitempty"`
-	Answer    *Signal `json:"answer,omitempty"`
+	Offer  *Signal `json:"offer,omitempty"`
+	Answer *Signal `json:"answer,omitempty"`
 }
 
 type testBroker struct {
@@ -75,7 +75,7 @@ func (b *testBroker) getSignal(w http.ResponseWriter, sessionID, kind string) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func (b *testBroker) postSignal(w http.ResponseWriter, r *http.Request, sessionID, kind string) {
@@ -367,15 +367,15 @@ func TestNewOfferClearsAnswer(t *testing.T) {
 	offer := Signal{Type: "offer", SDP: "v=0\no=- 123 IN IP4 127.0.0.1\ns=-\nt=0 0"}
 	answer := Signal{Type: "answer", SDP: "v=0\no=- 456 IN IP4 127.0.0.1\ns=-\nt=0 0"}
 
-	PutSignal(ctx, srv.URL, "clear-test", "offer", offer)
-	PutSignal(ctx, srv.URL, "clear-test", "answer", answer)
+	_ = PutSignal(ctx, srv.URL, "clear-test", "offer", offer)
+	_ = PutSignal(ctx, srv.URL, "clear-test", "answer", answer)
 
 	_, ok, _ := GetSignal(ctx, srv.URL, "clear-test", "answer")
 	if !ok {
 		t.Fatal("expected answer to exist before new offer")
 	}
 
-	PutSignal(ctx, srv.URL, "clear-test", "offer", offer)
+	_ = PutSignal(ctx, srv.URL, "clear-test", "offer", offer)
 
 	_, ok, _ = GetSignal(ctx, srv.URL, "clear-test", "answer")
 	if ok {
