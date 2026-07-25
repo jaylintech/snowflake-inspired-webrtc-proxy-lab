@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .gocache/
 .gomodcache/
+coverage.out
+coverage.html
