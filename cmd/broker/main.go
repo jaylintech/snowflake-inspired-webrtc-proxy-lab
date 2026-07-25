@@ -84,6 +84,7 @@ func NewBrokerHandler(sessionTTL time.Duration, maxBodySize int64) http.Handler 
 		sessions:    make(map[string]*sessionState),
 		sessionTTL:  sessionTTL,
 		maxBodySize: maxBodySize,
+		now:         time.Now,
 	})
 }
 

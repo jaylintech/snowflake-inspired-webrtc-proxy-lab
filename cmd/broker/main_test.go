@@ -16,6 +16,7 @@ func newTestHandler() http.Handler {
 	return NewHandlerWithBroker(&broker{
 		sessions:    make(map[string]*sessionState),
 		maxBodySize: 1 << 16,
+		now:         time.Now,
 	})
 }
 
@@ -282,7 +283,7 @@ func TestCORSMiddlewareAddsHeaders(t *testing.T) {
 }
 
 func TestPostSignalRejectsOversizedBody(t *testing.T) {
-	b := &broker{sessions: make(map[string]*sessionState), maxBodySize: 32}
+	b := &broker{sessions: make(map[string]*sessionState), maxBodySize: 32, now: time.Now}
 	mux := NewHandlerWithBroker(b)
 
 	largeBody := strings.Repeat("a", 64)
@@ -301,6 +302,7 @@ func TestSessionExpiry(t *testing.T) {
 		sessions:    make(map[string]*sessionState),
 		sessionTTL:  50 * time.Millisecond,
 		maxBodySize: 1 << 16,
+		now:         time.Now,
 	}
 	mux := NewHandlerWithBroker(b)
 
@@ -327,7 +329,7 @@ func TestSessionExpiry(t *testing.T) {
 }
 
 func TestSessionExpiryDoesNotRemoveFresh(t *testing.T) {
-	b := &broker{sessions: make(map[string]*sessionState), maxBodySize: 1 << 16}
+	b := &broker{sessions: make(map[string]*sessionState), maxBodySize: 1 << 16, now: time.Now}
 	mux := NewHandlerWithBroker(b)
 
 	signal := lab.Signal{Type: "offer", SDP: "v=0\no=- 123 456 IN IP4 127.0.0.1\ns=-\nt=0 0"}

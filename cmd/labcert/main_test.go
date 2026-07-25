@@ -16,7 +16,7 @@ func TestGenerateCertificatesCreatesVerifiableTURNChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse options: %v", err)
 	}
-	if err := generateCertificates(options, time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)); err != nil {
+	if err := generateCertificates(options, time.Now().UTC()); err != nil {
 		t.Fatalf("generate certificates: %v", err)
 	}
 
