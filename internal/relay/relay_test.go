@@ -325,7 +325,7 @@ func TestBuildRelayResponse(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("hello"))
+		_, _ = w.Write([]byte("hello"))
 	}))
 	defer ts.Close()
 
@@ -357,7 +357,7 @@ func TestBuildRelayResponseTruncates(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write(bytes.Repeat([]byte("a"), 100))
+		_, _ = w.Write(bytes.Repeat([]byte("a"), 100))
 	}))
 	defer ts.Close()
 
@@ -446,9 +446,9 @@ func TestSendRelayResponseChunked(t *testing.T) {
 
 func TestShouldTreatBodyAsText(t *testing.T) {
 	cases := []struct {
-		body    []byte
-		ct      string
-		want    bool
+		body []byte
+		ct   string
+		want bool
 	}{
 		{[]byte("hello"), "text/plain", true},
 		{[]byte("hello"), "text/html", true},
@@ -512,7 +512,7 @@ func TestBuildRelayResponseFollowsFinalURL(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("final"))
+		_, _ = w.Write([]byte("final"))
 	}))
 	defer ts.Close()
 
