@@ -3,12 +3,14 @@ package main
 import (
 	"net/url"
 	"testing"
+
+	"snowflake-inspired-webrtc-proxy-lab/internal/relay"
 )
 
 func mustTarget(t *testing.T, raw string) *url.URL {
 	t.Helper()
 
-	target, err := parseTarget(raw)
+	target, err := relay.ParseTarget(raw)
 	if err != nil {
 		t.Fatalf("parse target %q: %v", raw, err)
 	}
@@ -18,7 +20,7 @@ func mustTarget(t *testing.T, raw string) *url.URL {
 func TestBoundedTargetURLUsesTargetBasePath(t *testing.T) {
 	target := mustTarget(t, "https://example.com/lab")
 
-	got, err := boundedTargetURL(target, "/robots.txt?via=webrtc")
+	got, err := relay.BoundedTargetURL(target, "/robots.txt?via=webrtc")
 	if err != nil {
 		t.Fatalf("bounded target URL: %v", err)
 	}
@@ -32,7 +34,7 @@ func TestBoundedTargetURLUsesTargetBasePath(t *testing.T) {
 func TestBoundedTargetURLRejectsAbsoluteURL(t *testing.T) {
 	target := mustTarget(t, "https://example.com")
 
-	if _, err := boundedTargetURL(target, "https://other.example/"); err == nil {
+	if _, err := relay.BoundedTargetURL(target, "https://other.example/"); err == nil {
 		t.Fatal("expected absolute request URL to be rejected")
 	}
 }
@@ -40,10 +42,11 @@ func TestBoundedTargetURLRejectsAbsoluteURL(t *testing.T) {
 func TestBoundedTargetURLRejectsParentPathSegment(t *testing.T) {
 	target := mustTarget(t, "https://example.com/lab")
 
-	if _, err := boundedTargetURL(target, "/../admin"); err == nil {
+	if _, err := relay.BoundedTargetURL(target, "/../admin"); err == nil {
 		t.Fatal("expected parent-directory request path to be rejected")
 	}
 }
+
 func TestRedirectAllowedRequiresSameTargetBasePath(t *testing.T) {
 	target := mustTarget(t, "https://example.com/lab")
 
@@ -51,7 +54,7 @@ func TestRedirectAllowedRequiresSameTargetBasePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !redirectAllowed(target, allowed) {
+	if !relay.RedirectAllowed(target, allowed) {
 		t.Fatal("expected same-origin redirect under target base path to be allowed")
 	}
 
@@ -59,7 +62,7 @@ func TestRedirectAllowedRequiresSameTargetBasePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if redirectAllowed(target, outsidePath) {
+	if relay.RedirectAllowed(target, outsidePath) {
 		t.Fatal("expected same-origin redirect outside target base path to be blocked")
 	}
 
@@ -67,13 +70,13 @@ func TestRedirectAllowedRequiresSameTargetBasePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if redirectAllowed(target, otherOrigin) {
+	if relay.RedirectAllowed(target, otherOrigin) {
 		t.Fatal("expected cross-origin redirect to be blocked")
 	}
 }
 
 func TestRelayResponseBodyBase64EncodesBinary(t *testing.T) {
-	body, format := relayResponseBody([]byte{0x00, 0x01, 0xff}, "image/png")
+	body, format := relay.RelayResponseBody([]byte{0x00, 0x01, 0xff}, "image/png")
 	if format != "base64" {
 		t.Fatalf("format = %q, want base64", format)
 	}
@@ -83,7 +86,7 @@ func TestRelayResponseBodyBase64EncodesBinary(t *testing.T) {
 }
 
 func TestParseTargetRejectsParentPathSegment(t *testing.T) {
-	if _, err := parseTarget("https://example.com/lab/../admin"); err == nil {
+	if _, err := relay.ParseTarget("https://example.com/lab/../admin"); err == nil {
 		t.Fatal("expected parent-directory target path to be rejected")
 	}
 }

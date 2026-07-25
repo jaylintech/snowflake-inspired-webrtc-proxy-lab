@@ -12,3 +12,5 @@ testbed/**/*.pem
 testbed/**/private/
 testbed/private/
 captures/
+coverage.out
+coverage.html

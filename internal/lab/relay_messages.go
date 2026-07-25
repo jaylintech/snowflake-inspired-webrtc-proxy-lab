@@ -1,10 +1,16 @@
 package lab
 
+import "encoding/json"
+
 const (
 	RelayRequestType       = "LAB_PROXY_REQUEST"
 	RelayResponseType      = "LAB_PROXY_RESPONSE"
 	RelayResponseChunkType = "LAB_PROXY_RESPONSE_CHUNK"
 )
+
+type DataChannelWriter interface {
+	Send(payload []byte) error
+}
 
 type RelayRequest struct {
 	Type    string            `json:"type"`
@@ -33,4 +39,8 @@ type RelayResponse struct {
 	Truncated    bool              `json:"truncated,omitempty"`
 	Error        string            `json:"error,omitempty"`
 	Time         string            `json:"time"`
+}
+
+func MarshalJSON(v any) ([]byte, error) {
+	return json.Marshal(v)
 }

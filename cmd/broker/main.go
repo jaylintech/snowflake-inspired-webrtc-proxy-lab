@@ -16,12 +16,18 @@ import (
 	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
-const maxSignalBytes = 1 << 20
+const (
+	defaultSessionTTL      = 30 * time.Minute
+	defaultCleanupInterval = 5 * time.Minute
+	defaultMaxBodyBytes    = 1 << 16
+	maxSessionIDLength     = 256
+)
 
 type broker struct {
 	mu           sync.RWMutex
 	sessions     map[string]*sessionState
 	sessionTTL   time.Duration
+	maxBodySize  int64
 	sharedSecret string
 	now          func() time.Time
 }
@@ -34,8 +40,9 @@ type sessionState struct {
 
 func main() {
 	listen := flag.String("listen", ":8080", "HTTP listen address for the signaling broker")
-	sessionTTL := flag.Duration("session-ttl", 15*time.Minute, "idle lifetime for signaling sessions; 0 disables expiry")
-	cleanupInterval := flag.Duration("cleanup-interval", time.Minute, "interval for expired-session cleanup")
+	sessionTTL := flag.Duration("session-ttl", defaultSessionTTL, "session time-to-live; 0 disables expiry")
+	cleanupInterval := flag.Duration("cleanup-interval", defaultCleanupInterval, "interval for expired-session cleanup")
+	maxBody := flag.Int64("max-body", defaultMaxBodyBytes, "maximum request body size in bytes")
 	sharedSecret := flag.String("shared-secret", os.Getenv("LAB_BROKER_TOKEN"), "optional bearer token for signaling endpoints; prefer LAB_BROKER_TOKEN")
 	flag.Parse()
 
@@ -49,27 +56,48 @@ func main() {
 	b := &broker{
 		sessions:     make(map[string]*sessionState),
 		sessionTTL:   *sessionTTL,
+		maxBodySize:  *maxBody,
 		sharedSecret: strings.TrimSpace(*sharedSecret),
 		now:          time.Now,
 	}
-	if b.sessionTTL > 0 {
-		go b.cleanupLoop(context.Background(), *cleanupInterval)
-	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("/sessions/", b.handleSessionSignal)
+	if *sessionTTL > 0 {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go b.cleanupLoop(ctx, *cleanupInterval)
+	}
 
 	authMode := "disabled"
 	if b.sharedSecret != "" {
 		authMode = "enabled"
 	}
-	log.Printf("signaling broker listening on %s; session TTL=%s; bearer auth=%s", *listen, b.sessionTTL, authMode)
-	if err := http.ListenAndServe(*listen, withCORS(mux)); err != nil {
+	log.Printf("signaling broker listening on %s; session-ttl=%s; max-body=%d; bearer auth=%s", *listen, b.sessionTTL, b.maxBodySize, authMode)
+
+	handler := NewHandlerWithBroker(b)
+	if err := http.ListenAndServe(*listen, handler); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func NewBrokerHandler(sessionTTL time.Duration, maxBodySize int64) http.Handler {
+	return NewHandlerWithBroker(&broker{
+		sessions:    make(map[string]*sessionState),
+		sessionTTL:  sessionTTL,
+		maxBodySize: maxBodySize,
+	})
+}
+
+func NewHandlerWithBroker(b *broker) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/sessions/", b.handleSessionSignal)
+	return withCORS(mux)
+}
+
+func NewHandler() http.Handler {
+	return NewBrokerHandler(0, defaultMaxBodyBytes)
 }
 
 func withCORS(next http.Handler) http.Handler {
@@ -95,7 +123,7 @@ func (b *broker) handleSessionSignal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sessionID, kind, ok := parseSignalPath(r.URL.Path)
-	if !ok {
+	if !ok || len(sessionID) > maxSessionIDLength {
 		http.NotFound(w, r)
 		return
 	}
@@ -161,11 +189,14 @@ func (b *broker) getSignal(w http.ResponseWriter, sessionID, kind string) {
 
 func (b *broker) postSignal(w http.ResponseWriter, r *http.Request, sessionID, kind string) {
 	defer r.Body.Close()
-	r.Body = http.MaxBytesReader(w, r.Body, maxSignalBytes)
+
+	if b.maxBodySize > 0 {
+		r.Body = http.MaxBytesReader(w, r.Body, b.maxBodySize)
+	}
 
 	var payload lab.Signal
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON signal", http.StatusBadRequest)
+		http.Error(w, "invalid or oversized JSON signal", http.StatusBadRequest)
 		return
 	}
 	desc, err := payload.Description()
@@ -242,19 +273,41 @@ func (b *broker) cleanupLoop(ctx context.Context, interval time.Duration) {
 	}
 }
 
+func (b *broker) cleanExpiredSessions(ttl time.Duration) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	cutoff := time.Now().UTC().Add(-ttl)
+	var cleaned int
+	for id, state := range b.sessions {
+		if state.UpdatedAt.Before(cutoff) {
+			delete(b.sessions, id)
+			cleaned++
+		}
+	}
+	return cleaned
+}
+
 func parseSignalPath(path string) (sessionID, kind string, ok bool) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) != 3 || parts[0] != "sessions" {
+	if len(parts) < 2 || parts[0] != "sessions" {
 		return "", "", false
 	}
-	if parts[2] != "offer" && parts[2] != "answer" {
+	if len(parts) == 2 {
+		decodedSession, err := url.PathUnescape(parts[1])
+		if err != nil || strings.TrimSpace(decodedSession) == "" {
+			return "", "", false
+		}
+		return decodedSession, "", true
+	}
+	kind = parts[len(parts)-1]
+	if kind != "offer" && kind != "answer" {
 		return "", "", false
 	}
-
-	decodedSession, err := url.PathUnescape(parts[1])
+	rawSession := strings.Join(parts[1:len(parts)-1], "/")
+	decodedSession, err := url.PathUnescape(rawSession)
 	if err != nil || strings.TrimSpace(decodedSession) == "" {
 		return "", "", false
 	}
-
-	return decodedSession, parts[2], true
+	return decodedSession, kind, true
 }
