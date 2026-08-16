@@ -333,14 +333,22 @@ def run_test(_: argparse.Namespace) -> int:
 
 def run_teardown(args: argparse.Namespace) -> int:
     cert_dir = getattr(args, "out", "testbed/private/turn")
-    cmd = role_command("labcert", ["-out", cert_dir, "-clean"])
-    run_foreground(cmd)
+    result = 0
     if command_available("docker"):
         compose_file = REPO_ROOT / "testbed" / "compose.yaml"
         env_file = REPO_ROOT / "testbed" / ".env"
         if compose_file.exists() and env_file.exists():
             print("Stopping testbed containers...")
-            run_foreground(["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file), "down"])
+            result = run_foreground(["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file), "down"])
+
+    cmd = role_command("labcert", ["-out", cert_dir, "-clean"])
+    cert_result = run_foreground(cmd)
+    if result == 0:
+        result = cert_result
+
+    if result != 0:
+        print("Teardown did not complete successfully; review the command output above.", file=sys.stderr)
+        return result
     print("Teardown complete. If you imported ca-cert.pem into your OS trust store, ensure it is removed.")
     return 0
 
