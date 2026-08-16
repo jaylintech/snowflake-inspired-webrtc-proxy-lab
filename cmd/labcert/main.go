@@ -32,7 +32,16 @@ func main() {
 	ipAddresses := flag.String("ip", "127.0.0.1", "comma-separated IP addresses for the TURN server certificate")
 	validFor := flag.Duration("valid-for", 7*24*time.Hour, "certificate validity duration")
 	force := flag.Bool("force", false, "overwrite existing generated files")
+	clean := flag.Bool("clean", false, "clean and remove temporary certificate files from the output directory")
 	flag.Parse()
+
+	if *clean {
+		if err := cleanCertificates(*outputDirectory); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("successfully cleaned lab certificate files from %s", *outputDirectory)
+		return
+	}
 
 	options, err := parseOptions(*outputDirectory, *dnsNames, *ipAddresses, *validFor, *force)
 	if err != nil {
@@ -46,6 +55,20 @@ func main() {
 	if runtime.GOOS == "windows" {
 		log.Printf("Windows does not enforce POSIX mode bits; restrict the output directory ACL to the current lab user")
 	}
+}
+
+func cleanCertificates(outputDirectory string) error {
+	if strings.TrimSpace(outputDirectory) == "" {
+		return fmt.Errorf("output directory is required")
+	}
+	certFiles := []string{"ca-cert.pem", "turn-cert.pem", "turn-key.pem", "ca-key.pem"}
+	for _, name := range certFiles {
+		path := filepath.Join(outputDirectory, name)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func parseOptions(outputDirectory, dnsCSV, ipCSV string, validFor time.Duration, force bool) (certificateOptions, error) {
