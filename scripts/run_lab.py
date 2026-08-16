@@ -331,6 +331,40 @@ def run_test(_: argparse.Namespace) -> int:
     return run_foreground(["go", "test", "./..."])
 
 
+def run_teardown(args: argparse.Namespace) -> int:
+    cert_dir = getattr(args, "out", "testbed/private/turn")
+    result = 0
+    if command_available("docker"):
+        compose_file = REPO_ROOT / "testbed" / "compose.yaml"
+        env_file = REPO_ROOT / "testbed" / ".env"
+        if compose_file.exists() and env_file.exists():
+            print("Stopping testbed containers...")
+            result = run_foreground(["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file), "down"])
+
+    cmd = role_command("labcert", ["-out", cert_dir, "-clean"])
+    cert_result = run_foreground(cmd)
+    if result == 0:
+        result = cert_result
+
+    if result != 0:
+        print("Teardown did not complete successfully; review the command output above.", file=sys.stderr)
+        return result
+    print("Teardown complete. If you imported ca-cert.pem into your OS trust store, ensure it is removed.")
+    return 0
+
+
+def run_analyze_telemetry(args: argparse.Namespace) -> int:
+    script = REPO_ROOT / "scripts" / "analyze_telemetry.py"
+    cmd = [sys.executable, str(script)]
+    if getattr(args, "coturn_log", None):
+        cmd.extend(["--coturn-log", args.coturn_log])
+    if getattr(args, "zeek_dir", None):
+        cmd.extend(["--zeek-dir", args.zeek_dir])
+    if getattr(args, "eve_json", None):
+        cmd.extend(["--eve-json", args.eve_json])
+    return run_foreground(cmd)
+
+
 def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--session", default="lab-demo")
     parser.add_argument("--broker-url", default="http://127.0.0.1:8080")
@@ -382,12 +416,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "browserui": run_browserui,
         "build": run_build,
         "test": run_test,
+        "teardown": run_teardown,
+        "analyze-telemetry": run_analyze_telemetry,
     }
 
     for name, func in commands.items():
         subparser = subparsers.add_parser(name)
         if name in {"local", "relay-local", "proxy-local", "browser-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "browserui"}:
             add_common_args(subparser)
+        elif name == "teardown":
+            subparser.add_argument("--out", default="testbed/private/turn")
+        elif name == "analyze-telemetry":
+            subparser.add_argument("--coturn-log", default="")
+            subparser.add_argument("--zeek-dir", default="")
+            subparser.add_argument("--eve-json", default="")
         subparser.set_defaults(func=func)
 
     return parser.parse_args(argv)
