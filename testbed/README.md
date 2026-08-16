@@ -41,11 +41,11 @@ Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:
 ## Implemented Testbed
 
 - `compose.yaml`: pinned Coturn and mitmproxy services (explicit forward proxy baseline).
-- `compose.transparent.yaml`: WireGuard/transparent gateway mode for inline TLS/DTLS bumping measurements.
+- `compose.transparent.yaml`: experimental WireGuard gateway for routing controlled clients through mitmproxy.
 - `.env.example`: non-secret version and configuration template.
 - `RUNBOOK.md`: certificate, startup, baseline, TURN, capture, analysis, and cleanup procedure.
 - `scripts/capture-part2.ps1`: time-bounded dumpcap capture with SHA-256 manifest.
 - `scripts/analyze-pcap.ps1`: network-disabled offline Suricata and Zeek execution.
 - `scripts/test-config.ps1`: preflight validation for secrets, certificates, and Compose rendering.
 
-The default mitmproxy service in `compose.yaml` is an explicit HTTP(S) proxy baseline. To evaluate transparent Layer 4 redirection and inline TLS/DTLS bumping, use `compose.transparent.yaml`.
+The default mitmproxy service in `compose.yaml` is an explicit HTTP(S) proxy baseline. The WireGuard mode in `compose.transparent.yaml` can place a controlled client behind mitmproxy for topology experiments, but its presence is not evidence that TURNS was decrypted or that DTLS was intercepted. Record a successful HTTPS bump control, the selected ICE candidate pair, packet captures on both sides of the gateway, and mitmproxy flow/log output before describing a run as inline interception. Treat DTLS interception as out of scope unless a separate UDP-capable appliance or gateway is documented and measured.

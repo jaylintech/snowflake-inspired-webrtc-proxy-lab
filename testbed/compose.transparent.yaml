@@ -1,3 +1,5 @@
+# Experimental routing harness. This composition does not, by itself, prove
+# that TURNS is decrypted and does not provide a DTLS interception path.
 name: snowflake-part2-transparent-testbed
 
 services:
