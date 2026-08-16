@@ -48,6 +48,26 @@ func TestGenerateCertificatesRefusesOverwrite(t *testing.T) {
 	}
 }
 
+func TestCleanCertificatesRemovesGeneratedFiles(t *testing.T) {
+	directory := t.TempDir()
+	options, err := parseOptions(directory, "turn.lab.example", "127.0.0.1", time.Hour, false)
+	if err != nil {
+		t.Fatalf("parse options: %v", err)
+	}
+	if err := generateCertificates(options, time.Now().UTC()); err != nil {
+		t.Fatalf("generate certificates: %v", err)
+	}
+	if err := cleanCertificates(directory); err != nil {
+		t.Fatalf("clean certificates: %v", err)
+	}
+	for _, name := range []string{"ca-cert.pem", "turn-cert.pem", "turn-key.pem"} {
+		path := filepath.Join(directory, name)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("file %s still exists after cleanCertificates", path)
+		}
+	}
+}
+
 func readCertificate(t *testing.T, path string) *x509.Certificate {
 	t.Helper()
 	data, err := os.ReadFile(path)

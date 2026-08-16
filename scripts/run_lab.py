@@ -331,6 +331,20 @@ def run_test(_: argparse.Namespace) -> int:
     return run_foreground(["go", "test", "./..."])
 
 
+def run_teardown(args: argparse.Namespace) -> int:
+    cert_dir = getattr(args, "out", "testbed/private/turn")
+    cmd = role_command("labcert", ["-out", cert_dir, "-clean"])
+    run_foreground(cmd)
+    if command_available("docker"):
+        compose_file = REPO_ROOT / "testbed" / "compose.yaml"
+        env_file = REPO_ROOT / "testbed" / ".env"
+        if compose_file.exists() and env_file.exists():
+            print("Stopping testbed containers...")
+            run_foreground(["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file), "down"])
+    print("Teardown complete. If you imported ca-cert.pem into your OS trust store, ensure it is removed.")
+    return 0
+
+
 def add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--session", default="lab-demo")
     parser.add_argument("--broker-url", default="http://127.0.0.1:8080")
@@ -382,12 +396,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "browserui": run_browserui,
         "build": run_build,
         "test": run_test,
+        "teardown": run_teardown,
     }
 
     for name, func in commands.items():
         subparser = subparsers.add_parser(name)
         if name in {"local", "relay-local", "proxy-local", "browser-local", "broker", "listener", "client", "target", "relay", "proxy", "webclient", "browserui"}:
             add_common_args(subparser)
+        elif name == "teardown":
+            subparser.add_argument("--out", default="testbed/private/turn")
         subparser.set_defaults(func=func)
 
     return parser.parse_args(argv)
