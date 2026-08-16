@@ -33,6 +33,7 @@ func main() {
 	interval := flag.Duration("interval", time.Second, "delay between proxied requests")
 	timeout := flag.Duration("timeout", 5*time.Minute, "maximum time to wait for signaling and responses")
 	pollInterval := flag.Duration("poll", time.Second, "broker polling interval")
+	transportPreset := flag.String("transport", "", "transport preset: direct, stun, turn-udp, turn-tcp, turns-tls")
 	flag.Parse()
 
 	requestPaths := splitPaths(*paths)
@@ -46,7 +47,12 @@ func main() {
 	signalCtx, cancelSignal := context.WithTimeout(ctx, *timeout)
 	defer cancelSignal()
 
-	pc, err := lab.NewPeerConnectionWithOptions(lab.PeerConnectionOptionsFromEnvironment(*stunServers, *icePortMin, *icePortMax, *advertiseIP))
+	opts := lab.PeerConnectionOptionsFromEnvironment(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
+	if err := lab.ApplyTransportPreset(&opts, *transportPreset, os.Getenv("LAB_TURN_HOST")); err != nil {
+		log.Fatalf("apply transport preset: %v", err)
+	}
+
+	pc, err := lab.NewPeerConnectionWithOptions(opts)
 	if err != nil {
 		log.Fatalf("create peer connection: %v", err)
 	}

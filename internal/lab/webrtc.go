@@ -23,6 +23,53 @@ type PeerConnectionOptions struct {
 	AdvertiseIP    string
 }
 
+// ApplyTransportPreset configures STUN, TURN, and ICE policy according to a named transport preset.
+// Supported presets:
+// - "direct": no STUN, no TURN, ICEPolicy "all" (local/direct host only)
+// - "stun": DefaultSTUN, no TURN, ICEPolicy "all"
+// - "turn-udp": turn:<host>:3478, ICEPolicy "relay"
+// - "turn-tcp": turn:<host>:3478?transport=tcp, ICEPolicy "relay"
+// - "turns-tls": turns:<host>:443?transport=tcp, ICEPolicy "relay"
+func ApplyTransportPreset(options *PeerConnectionOptions, preset string, defaultTurnHost string) error {
+	if options == nil {
+		return fmt.Errorf("peer connection options are required")
+	}
+	preset = strings.ToLower(strings.TrimSpace(preset))
+	if preset == "" {
+		return nil
+	}
+	turnHost := defaultTurnHost
+	if turnHost == "" {
+		turnHost = "turn.lab.example"
+	}
+
+	switch preset {
+	case "direct":
+		options.STUNServers = ""
+		options.TURNServers = ""
+		options.ICEPolicy = "all"
+	case "stun":
+		options.STUNServers = DefaultSTUN
+		options.TURNServers = ""
+		options.ICEPolicy = "all"
+	case "turn-udp":
+		options.STUNServers = ""
+		options.TURNServers = fmt.Sprintf("turn:%s:3478", turnHost)
+		options.ICEPolicy = "relay"
+	case "turn-tcp":
+		options.STUNServers = ""
+		options.TURNServers = fmt.Sprintf("turn:%s:3478?transport=tcp", turnHost)
+		options.ICEPolicy = "relay"
+	case "turns-tls":
+		options.STUNServers = ""
+		options.TURNServers = fmt.Sprintf("turns:%s:443?transport=tcp", turnHost)
+		options.ICEPolicy = "relay"
+	default:
+		return fmt.Errorf("unknown transport preset %q; must be direct, stun, turn-udp, turn-tcp, or turns-tls", preset)
+	}
+	return nil
+}
+
 // NewWebRTCConfig returns a minimal WebRTC configuration for a lab run.
 // Pass an empty stunCSV value to disable external STUN and test only local ICE.
 func NewWebRTCConfig(stunCSV string) webrtc.Configuration {
@@ -86,7 +133,7 @@ func NewPeerConnection(stunCSV string, icePortMin, icePortMax uint, advertiseIP 
 // PeerConnectionOptionsFromEnvironment adds the Part 2 TURN settings while
 // preserving the explicit STUN, port-range, and advertised-IP command flags.
 func PeerConnectionOptionsFromEnvironment(stunCSV string, icePortMin, icePortMax uint, advertiseIP string) PeerConnectionOptions {
-	return PeerConnectionOptions{
+	opts := PeerConnectionOptions{
 		STUNServers:    stunCSV,
 		TURNServers:    os.Getenv("LAB_TURN_URLS"),
 		TURNUsername:   os.Getenv("LAB_TURN_USERNAME"),
@@ -96,6 +143,7 @@ func PeerConnectionOptionsFromEnvironment(stunCSV string, icePortMin, icePortMax
 		ICEPortMax:     icePortMax,
 		AdvertiseIP:    advertiseIP,
 	}
+	return opts
 }
 
 // NewPeerConnectionWithOptions creates a PeerConnection with validated STUN,

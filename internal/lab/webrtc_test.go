@@ -47,3 +47,51 @@ func TestNewPeerConnectionAcceptsAdvertiseIP(t *testing.T) {
 	}
 	defer pc.Close()
 }
+
+func TestApplyTransportPreset(t *testing.T) {
+	tests := []struct {
+		preset      string
+		wantSTUN    string
+		wantTURN    string
+		wantPolicy  string
+		expectError bool
+	}{
+		{preset: "direct", wantSTUN: "", wantTURN: "", wantPolicy: "all", expectError: false},
+		{preset: "stun", wantSTUN: DefaultSTUN, wantTURN: "", wantPolicy: "all", expectError: false},
+		{preset: "turn-udp", wantSTUN: "", wantTURN: "turn:turn.lab.example:3478", wantPolicy: "relay", expectError: false},
+		{preset: "turn-tcp", wantSTUN: "", wantTURN: "turn:turn.lab.example:3478?transport=tcp", wantPolicy: "relay", expectError: false},
+		{preset: "turns-tls", wantSTUN: "", wantTURN: "turns:turn.lab.example:443?transport=tcp", wantPolicy: "relay", expectError: false},
+		{preset: "invalid", expectError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.preset, func(t *testing.T) {
+			opts := PeerConnectionOptions{}
+			err := ApplyTransportPreset(&opts, tt.preset, "turn.lab.example")
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error for preset %q", tt.preset)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if opts.STUNServers != tt.wantSTUN {
+				t.Errorf("STUNServers = %q, want %q", opts.STUNServers, tt.wantSTUN)
+			}
+			if opts.TURNServers != tt.wantTURN {
+				t.Errorf("TURNServers = %q, want %q", opts.TURNServers, tt.wantTURN)
+			}
+			if opts.ICEPolicy != tt.wantPolicy {
+				t.Errorf("ICEPolicy = %q, want %q", opts.ICEPolicy, tt.wantPolicy)
+			}
+		})
+	}
+}
+
+func TestApplyTransportPresetRejectsNilOptions(t *testing.T) {
+	if err := ApplyTransportPreset(nil, "direct", ""); err == nil {
+		t.Fatal("expected nil options to be rejected")
+	}
+}
