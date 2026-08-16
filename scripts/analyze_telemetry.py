@@ -55,20 +55,26 @@ def parse_zeek_logs(zeek_dir: Path) -> dict:
                     summary["connections"] += 1
 
     if ssl_log.exists():
+        fields: list[str] = []
         with ssl_log.open("r", encoding="utf-8", errors="ignore") as f:
             for line in f:
+                if line.startswith("#fields"):
+                    fields = line.rstrip("\n").split("\t")[1:]
+                    continue
                 if line.startswith("#"):
                     continue
                 parts = line.strip().split("\t")
-                if len(parts) >= 7:
-                    version = parts[6] if len(parts) > 6 else ""
-                    server_name = parts[8] if len(parts) > 8 else ""
-                    if "DTLS" in version:
-                        summary["dtls_sessions"] += 1
-                    elif "TLS" in version:
-                        summary["tls_sessions"] += 1
-                    if server_name and server_name != "-":
-                        summary["snis"].add(server_name)
+                if not fields or len(parts) < len(fields):
+                    continue
+                record = dict(zip(fields, parts))
+                version = record.get("version", "")
+                server_name = record.get("server_name", "")
+                if "DTLS" in version:
+                    summary["dtls_sessions"] += 1
+                elif "TLS" in version:
+                    summary["tls_sessions"] += 1
+                if server_name and server_name != "-":
+                    summary["snis"].add(server_name)
 
     return summary
 
