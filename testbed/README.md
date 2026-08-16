@@ -40,11 +40,12 @@ Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:
 
 ## Implemented Testbed
 
-- `compose.yaml`: pinned Coturn and mitmproxy services.
+- `compose.yaml`: pinned Coturn and mitmproxy services (explicit forward proxy baseline).
+- `compose.transparent.yaml`: WireGuard/transparent gateway mode for inline TLS/DTLS bumping measurements.
 - `.env.example`: non-secret version and configuration template.
 - `RUNBOOK.md`: certificate, startup, baseline, TURN, capture, analysis, and cleanup procedure.
 - `scripts/capture-part2.ps1`: time-bounded dumpcap capture with SHA-256 manifest.
 - `scripts/analyze-pcap.ps1`: network-disabled offline Suricata and Zeek execution.
 - `scripts/test-config.ps1`: preflight validation for secrets, certificates, and Compose rendering.
 
-The local mitmproxy service is an explicit HTTP(S) proxy baseline. It is not represented as an inline TURN or DTLS interception appliance.
+The default mitmproxy service in `compose.yaml` is an explicit HTTP(S) proxy baseline. To evaluate transparent Layer 4 redirection and inline TLS/DTLS bumping, use `compose.transparent.yaml`.
