@@ -89,3 +89,9 @@ func TestApplyTransportPreset(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyTransportPresetRejectsNilOptions(t *testing.T) {
+	if err := ApplyTransportPreset(nil, "direct", ""); err == nil {
+		t.Fatal("expected nil options to be rejected")
+	}
+}

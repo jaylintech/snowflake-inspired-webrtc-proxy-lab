@@ -13,7 +13,6 @@ import (
 const DefaultSTUN = "stun:stun.l.google.com:19302"
 
 type PeerConnectionOptions struct {
-	TransportPreset string
 	STUNServers    string
 	TURNServers    string
 	TURNUsername   string
@@ -32,11 +31,13 @@ type PeerConnectionOptions struct {
 // - "turn-tcp": turn:<host>:3478?transport=tcp, ICEPolicy "relay"
 // - "turns-tls": turns:<host>:443?transport=tcp, ICEPolicy "relay"
 func ApplyTransportPreset(options *PeerConnectionOptions, preset string, defaultTurnHost string) error {
+	if options == nil {
+		return fmt.Errorf("peer connection options are required")
+	}
 	preset = strings.ToLower(strings.TrimSpace(preset))
 	if preset == "" {
 		return nil
 	}
-	options.TransportPreset = preset
 	turnHost := defaultTurnHost
 	if turnHost == "" {
 		turnHost = "turn.lab.example"
@@ -141,9 +142,6 @@ func PeerConnectionOptionsFromEnvironment(stunCSV string, icePortMin, icePortMax
 		ICEPortMin:     icePortMin,
 		ICEPortMax:     icePortMax,
 		AdvertiseIP:    advertiseIP,
-	}
-	if envTransport := os.Getenv("LAB_TRANSPORT"); envTransport != "" {
-		_ = ApplyTransportPreset(&opts, envTransport, os.Getenv("LAB_TURN_HOST"))
 	}
 	return opts
 }

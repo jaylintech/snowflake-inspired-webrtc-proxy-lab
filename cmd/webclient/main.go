@@ -48,10 +48,8 @@ func main() {
 	defer cancelSignal()
 
 	opts := lab.PeerConnectionOptionsFromEnvironment(*stunServers, *icePortMin, *icePortMax, *advertiseIP)
-	if *transportPreset != "" {
-		if err := lab.ApplyTransportPreset(&opts, *transportPreset, os.Getenv("LAB_TURN_HOST")); err != nil {
-			log.Fatalf("apply transport preset: %v", err)
-		}
+	if err := lab.ApplyTransportPreset(&opts, *transportPreset, os.Getenv("LAB_TURN_HOST")); err != nil {
+		log.Fatalf("apply transport preset: %v", err)
 	}
 
 	pc, err := lab.NewPeerConnectionWithOptions(opts)
