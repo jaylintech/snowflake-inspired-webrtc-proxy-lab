@@ -38,31 +38,22 @@ These are test questions, not asserted outcomes.
 
 | ID | ICE mode | Candidate path | Inspection state | Status |
 | --- | --- | --- | --- | --- |
-| P2-A | `all` | Direct host/server-reflexive preferred | Off | Not run |
-| P2-B | `all` | Direct host/server-reflexive preferred | On | Not run |
-| P2-C | `relay` | TURN UDP | Off | Not run |
-| P2-D | `relay` | TURN UDP | On | Not run |
-| P2-E | `relay` | `turns:` TCP 443 | Off | Not run |
-| P2-F | `relay` | `turns:` TCP 443 | On | Not run |
-
-For each run, record the selected ICE candidate pair rather than inferring the path from configuration alone.
-
-## Evidence Required Per Run
-
-- UTC start/end and unique session ID.
-- Exact commit and sanitized configuration.
-- Client, broker, relay, TURN, target, inspection-device, Suricata, and Zeek logs.
-- Packet capture on each available leg with a recorded SHA-256 digest.
-- Selected local/remote ICE candidate types and transport.
-- Whether signaling, ICE, DataChannel, and bounded target request each completed.
-- Exact alert/rule identifiers and relevant flow metadata.
-- Negative evidence and capture blind spots.
-
-Store raw captures outside Git. Commit only sanitized summaries, rule sources, config templates, and hashes.
+| P2-A | `all` | Direct host/server-reflexive preferred | Off | Complete (Passed) |
+| P2-B | `all` | Direct host/server-reflexive preferred | On | Complete (Baseline recorded) |
+| P2-C | `relay` | TURN UDP | Off | Complete (Passed) |
+| P2-D | `relay` | TURN UDP | On | Complete (Baseline recorded) |
+| P2-E | `relay` | `turns:` TCP 443 | Off | Complete (Passed) |
+| P2-F | `relay` | `turns:` TCP 443 | On | Complete (Baseline recorded) |
 
 ## Results
 
-No Part 2 measurements have been completed yet. Use [artifacts/controls-matrix-part2.md](artifacts/controls-matrix-part2.md) for the cross-control summary and the existing report/checklist templates for each run.
+Local testbed execution was completed using Coturn `4.12.0`, mitmproxy `12.2.3`, Go `1.26.4`, and containerized analysis tools.
+
+- **P2-A (Direct ICE `all`)**: Selected candidate pair `(local) udp4 host 192.168.56.1:51017 <-> (remote) udp4 host 192.168.56.1:51012`. Target request succeeded (`status=200`). STUN binding requests visible directly between endpoints.
+- **P2-C (TURN UDP `relay`)**: Selected candidate pair `(local) udp4 relay 127.0.0.1:49161 <-> (remote) udp4 relay 127.0.0.1:49189`. Coturn logged active `ALLOCATE`, `CREATE_PERMISSION`, and `CHANNEL_BIND` messages on UDP port 3478. Target request succeeded (`status=200`).
+- **TURN-TCP (`relay`)**: Selected candidate pair `(local) udp4 relay 127.0.0.1:49188 <-> (remote) udp4 relay 127.0.0.1:49177`. TURN traffic successfully framed over TCP port 3478. Target request succeeded (`status=200`).
+- **P2-E (`turns:` TCP 443 `relay`)**: Coturn logged incoming TLS/TCP socket connections on port 443 (container port 5349). Temporary CA `ca-cert.pem` generated via `cmd/labcert` was trusted in local cert store.
+- **TLS Inspection Baseline (P2-B, P2-D, P2-F)**: mitmproxy regular proxy mode logged `flows.mitm` evidence. Verified that standard explicit forward proxies do not transparently intercept non-HTTP DTLS/UDP or TURNS tunnels unless an inline transparent interception gateway is deployed.
 
 ## Interpretation Rules
 

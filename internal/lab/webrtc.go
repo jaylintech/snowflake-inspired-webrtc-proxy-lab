@@ -168,8 +168,10 @@ func NewPeerConnectionWithOptions(options PeerConnectionOptions) (*webrtc.PeerCo
 	}
 
 	var settingEngine webrtc.SettingEngine
-	if err := settingEngine.SetEphemeralUDPPortRange(uint16(options.ICEPortMin), uint16(options.ICEPortMax)); err != nil {
-		return nil, fmt.Errorf("set ICE UDP port range: %w", err)
+	if options.ICEPortMin != 0 || options.ICEPortMax != 0 {
+		if err := settingEngine.SetEphemeralUDPPortRange(uint16(options.ICEPortMin), uint16(options.ICEPortMax)); err != nil {
+			return nil, fmt.Errorf("set ICE UDP port range: %w", err)
+		}
 	}
 	if advertiseIP != "" {
 		settingEngine.SetNAT1To1IPs([]string{advertiseIP}, webrtc.ICECandidateTypeHost)

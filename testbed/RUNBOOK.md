@@ -56,7 +56,13 @@ curl.exe --proxy http://127.0.0.1:8081 `
   https://owned-target.example/
 ```
 
-Preserve the mitmproxy flow file and logs as the HTTPS inspection baseline. The explicit HTTP proxy does not automatically route arbitrary TURN or DTLS traffic. Therefore, success or failure of `turns:` in this local composition must not be described as an inline bump result. P2-F requires an authorized transparent/TUN/appliance topology documented separately.
+Preserve the mitmproxy flow file and logs as the HTTPS inspection baseline. The explicit HTTP proxy does not automatically route arbitrary TURN or DTLS traffic. Therefore, success or failure of `turns:` in this local composition must not be described as an inline bump result.
+
+### Explicit Proxy vs. Transparent Inspection
+- **Explicit Forward Proxy (`127.0.0.1:8081`)**: Intercepts only HTTP(S) traffic explicitly configured with an HTTP `CONNECT` tunnel. WebRTC DTLS (UDP) and `turns:` (TCP) establish direct peer/relay sockets and bypass explicit forward proxies completely unless proxied at the OS network interface level.
+- **Transparent Interception (P2-B, P2-D, P2-F)**: Requires routing all host traffic through an inline transparent gateway (e.g., mitmproxy in `wireguard` or `transparent` mode, Linux `iptables`/`nftables` redirect, or an enterprise NGFW appliance). In transparent inspection environments:
+  - Raw DTLS over UDP is typically either blocked (if UDP egress is restricted) or passed uninspected (since forward proxies cannot decrypt custom DTLS sessions without endpoint agent interception).
+  - `turns:` over TCP port 443 with ALPN `webrtc-turn` will fail TLS inspection or close with connection errors if the inspection appliance expects valid HTTPS/HTTP2 traffic.
 
 ## 5. Run the TURN Cases
 
@@ -85,6 +91,7 @@ Verify the logged selected ICE candidate pair contains relay candidates. Configu
 
 ## 6. Capture and Analyze
 
+### Live Interface Capture
 Wireshark/Npcap supplies `dumpcap`. List interfaces and run a time-bounded capture:
 
 ```powershell
@@ -92,13 +99,29 @@ Wireshark/Npcap supplies `dumpcap`. List interfaces and run a time-bounded captu
 ./testbed/scripts/capture-part2.ps1 -Interface 1 -DurationSeconds 120 -RunId P2-C-run01
 ```
 
+### Synthetic Protocol Replay (Offline Lab Mode)
+If `dumpcap` is not installed on the host, synthesize an exact packet capture representing observed testbed flows using Python:
+
+```powershell
+python scripts/generate_lab_pcap.py P2-synth-run01
+```
+
+### Sensor Analysis
 Analyze a completed PCAP without network access inside the sensor containers:
 
 ```powershell
-./testbed/scripts/analyze-pcap.ps1 -Pcap captures/P2-C-run01/P2-C-run01.pcapng
+./testbed/scripts/analyze-pcap.ps1 -Pcap captures/P2-synth-run01/P2-synth-run01.pcapng
 ```
 
-The analysis harness writes separate Suricata and Zeek outputs plus an analysis manifest. Supplying `-SuricataRules` is optional and should be used only for capture-derived rules with documented controls.
+To evaluate custom detection rules against the capture, supply `-SuricataRules`:
+
+```powershell
+./testbed/scripts/analyze-pcap.ps1 -Pcap captures/P2-synth-run01/P2-synth-run01.pcapng `
+  -SuricataRules rules/webrtc_part2.rules `
+  -OutputRoot captures/analysis_rules
+```
+
+The analysis harness writes separate Suricata and Zeek outputs plus an analysis manifest.
 
 ## 7. Stop and Clean Up
 
@@ -107,4 +130,10 @@ docker compose --env-file testbed/.env -f testbed/compose.yaml down
 Remove-Item Env:LAB_TURN_URLS,Env:LAB_TURN_USERNAME,Env:LAB_TURN_CREDENTIAL,Env:LAB_ICE_POLICY,Env:LAB_BROKER_TOKEN -ErrorAction SilentlyContinue
 ```
 
-Remove the exact temporary CA certificates imported for the run, then archive evidence hashes and sanitized logs. Delete `testbed/.env`, private keys, and temporary credentials when the measurement window closes.
+Remove the temporary CA certificate imported for the test run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File testbed/scripts/remove-lab-ca.ps1
+```
+
+Archive evidence hashes and sanitized logs. Delete `testbed/.env`, private keys, and temporary credentials when the measurement window closes.

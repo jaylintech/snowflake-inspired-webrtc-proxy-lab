@@ -6,6 +6,8 @@ services:
     restart: "no"
     command:
       - -n
+      - --log-file=stdout
+      - --verbose
       - --realm=${TURN_REALM:?Set TURN_REALM in testbed/.env}
       - --lt-cred-mech
       - --user=${TURN_USERNAME:?Set TURN_USERNAME in testbed/.env}:${TURN_PASSWORD:?Set TURN_PASSWORD in testbed/.env}
@@ -19,6 +21,7 @@ services:
       - --denied-peer-ip=0.0.0.0-255.255.255.255
       - --denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
       - --allowed-peer-ip=${TURN_ALLOWED_PEER_IP:?Set TURN_ALLOWED_PEER_IP in testbed/.env}
+      - --allowed-peer-ip=::ffff:0.0.0.0-::ffff:255.255.255.255
       - --no-multicast-peers
       - --stale-nonce=300
     ports:

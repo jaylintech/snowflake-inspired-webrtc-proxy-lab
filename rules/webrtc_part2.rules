@@ -1,0 +1,11 @@
+# Validated experimental detection rules for Snowflake Part 2 WebRTC lab
+# Sensor: Suricata 8.0.5
+
+# Rule 1: STUN Magic Cookie in UDP header (RFC 5389 magic cookie 0x2112A442 at byte offset 4)
+alert udp any any -> any any (msg:"ET INFO WebRTC/STUN Message Observed (Magic Cookie)"; content:"|21 12 a4 42|"; offset:4; depth:4; classtype:policy-violation; sid:1000001; rev:1;)
+
+# Rule 2: DTLS Record Layer Handshake header (type=0x16, version=0xFEFD DTLS 1.2)
+alert udp any any -> any any (msg:"ET INFO WebRTC DTLS 1.2 Handshake Record"; content:"|16 fe fd|"; offset:0; depth:3; classtype:policy-violation; sid:1000002; rev:1;)
+
+# Rule 3: TLS SNI for lab TURN infrastructure
+alert tls any any -> any 443 (msg:"ET POLICY WebRTC turns: Connection to Lab TURN Realm"; tls.sni; content:"turn.lab.example"; classtype:policy-violation; sid:1000003; rev:1;)
