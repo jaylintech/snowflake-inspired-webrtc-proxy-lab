@@ -161,7 +161,7 @@ func handleRelayMessage(ctx context.Context, client *http.Client, d *webrtc.Data
 		relay.SendRelayResponse(d, relay.ErrorResponse(relayReq.ID, fmt.Sprintf("target request failed: %v", err)))
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	response := relay.BuildRelayResponse(relayReq, resp, maxBody)
 	relay.SendRelayResponse(d, response)

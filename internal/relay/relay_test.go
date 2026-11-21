@@ -333,7 +333,7 @@ func TestBuildRelayResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	response := BuildRelayResponse(relayReq, resp, 4096)
 	if response.Status != 200 {
@@ -365,7 +365,7 @@ func TestBuildRelayResponseTruncates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	response := BuildRelayResponse(relayReq, resp, 10)
 	if !response.Truncated {
@@ -520,7 +520,7 @@ func TestBuildRelayResponseFollowsFinalURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	response := BuildRelayResponse(relayReq, resp, 4096)
 	if response.Target != ts.URL+"/final" {
