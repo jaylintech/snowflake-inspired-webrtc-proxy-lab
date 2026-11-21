@@ -29,7 +29,7 @@ func PutSignal(ctx context.Context, brokerURL, sessionID, kind string, payload S
 	if err != nil {
 		return fmt.Errorf("post %s signal: %w", kind, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fmt.Errorf("post %s signal: broker returned %s", kind, resp.Status)
@@ -49,7 +49,7 @@ func GetSignal(ctx context.Context, brokerURL, sessionID, kind string, brokerTok
 	if err != nil {
 		return Signal{}, false, fmt.Errorf("get %s signal: %w", kind, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return Signal{}, false, nil

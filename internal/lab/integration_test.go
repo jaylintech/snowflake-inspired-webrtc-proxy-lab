@@ -79,7 +79,7 @@ func (b *testBroker) getSignal(w http.ResponseWriter, sessionID, kind string) {
 }
 
 func (b *testBroker) postSignal(w http.ResponseWriter, r *http.Request, sessionID, kind string) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	var payload Signal
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -217,7 +217,7 @@ func TestDeleteThenNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", resp.StatusCode)
@@ -254,13 +254,13 @@ func TestWebRTCEndToEndThroughBrokerSignaling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create peer A: %v", err)
 	}
-	defer pcA.Close()
+	defer func() { _ = pcA.Close() }()
 
 	pcB, err := NewPeerConnection("", 0, 0, "")
 	if err != nil {
 		t.Fatalf("create peer B: %v", err)
 	}
-	defer pcB.Close()
+	defer func() { _ = pcB.Close() }()
 
 	var msgWG sync.WaitGroup
 	msgWG.Add(1)

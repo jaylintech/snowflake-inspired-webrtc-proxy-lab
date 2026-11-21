@@ -27,7 +27,7 @@ func TestNewPeerConnectionAcceptsSingleICEPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("single-port ICE range failed: %v", err)
 	}
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 }
 
 func TestNewPeerConnectionRejectsInvalidAdvertiseIP(t *testing.T) {
@@ -45,7 +45,7 @@ func TestNewPeerConnectionAcceptsAdvertiseIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("advertised IP with single-port ICE range failed: %v", err)
 	}
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 }
 
 func TestApplyTransportPreset(t *testing.T) {

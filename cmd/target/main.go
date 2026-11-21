@@ -33,7 +33,7 @@ func main() {
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	requestID := r.Header.Get("X-Proxy-Request-ID")
 	if requestID == "" {

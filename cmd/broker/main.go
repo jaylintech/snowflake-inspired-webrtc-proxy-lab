@@ -189,7 +189,7 @@ func (b *broker) getSignal(w http.ResponseWriter, sessionID, kind string) {
 }
 
 func (b *broker) postSignal(w http.ResponseWriter, r *http.Request, sessionID, kind string) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	if b.maxBodySize > 0 {
 		r.Body = http.MaxBytesReader(w, r.Body, b.maxBodySize)
