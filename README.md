@@ -17,9 +17,15 @@ Additional documentation:
 - [GUIDE.md](GUIDE.md): runbook and verification steps
 - [REMOTE_TEST.md](REMOTE_TEST.md): off-LAN remote proxy host test guide
 - [FINDINGS.md](FINDINGS.md): observed DNS-filter behavior and off-LAN test plan
-- [FINDINGS_PART2.md](FINDINGS_PART2.md): in-progress TURN, TLS-inspection, and detectability measurements
+- [FINDINGS_PART2.md](FINDINGS_PART2.md): completed TURN, TLS-inspection, and detectability measurements (P2-A through P2-F)
 - [testbed/RUNBOOK.md](testbed/RUNBOOK.md): reproducible Coturn, TLS-inspection baseline, capture, and offline analysis procedure
 - [DETECTION_NOTES.md](DETECTION_NOTES.md): why endpoint tools may flag the lab and how to handle that transparently
+
+Published investigative write-ups on [notes.jaylin.tech](https://notes.jaylin.tech):
+
+- [Part 1: Initial Architecture, NextDNS, and Off-LAN NAT Results](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-1.html)
+- [Part 2: Testbed Architecture and Threat Modeling](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-2.html)
+- [Part 3: Empirical Findings, Forward Proxy Boundaries, and Detection Engineering](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-3.html)
 
 ## Scope
 
@@ -40,6 +46,7 @@ This project is a defensive network-behavior lab. It is intentionally bounded:
 - `cmd/relay`: bounded WebRTC proxy implementation. User-facing scripts expose it as `proxy`.
 - `cmd/webclient`: CLI client that sends synthetic requests over the DataChannel.
 - `cmd/browserui`: local browser-based viewer that creates the WebRTC DataChannel from the browser and renders sanitized responses.
+- `cmd/labcert`: ephemeral lab CA and server certificate generator/cleanup helper for `turns:` and TLS-inspection testing.
 - `cmd/target`: controlled HTTP target for local verification.
 
 The `client`/`listener` pair is separate from the bounded relay/viewer path. It exists so EDR, NDR, IDS, and flow-analysis experiments have an intentionally beacon-shaped but harmless signal to observe. The inventory response is a constant synthetic string, and `synthetic-upload` generates its payload in memory rather than reading files.

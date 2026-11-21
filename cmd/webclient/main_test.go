@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 func TestAssemblerSingleChunk(t *testing.T) {

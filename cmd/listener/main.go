@@ -15,7 +15,7 @@ import (
 
 	"github.com/pion/webrtc/v3"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 func main() {

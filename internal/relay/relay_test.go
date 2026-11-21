@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"testing"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 func mustURL(t *testing.T, raw string) *url.URL {

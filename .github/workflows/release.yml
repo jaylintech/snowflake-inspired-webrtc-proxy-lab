@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build cross-platform binaries
+        run: |
+          mkdir -p dist/linux-amd64 dist/windows-amd64
+          GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64 ./cmd/...
+          GOOS=windows GOARCH=amd64 go build -o dist/windows-amd64 ./cmd/...
+          (cd dist/linux-amd64 && tar -czf ../snowflake-lab-linux-amd64.tar.gz .)
+          (cd dist/windows-amd64 && zip -r ../snowflake-lab-windows-amd64.zip .)
+          (cd dist && sha256sum snowflake-lab-linux-amd64.tar.gz snowflake-lab-windows-amd64.zip > checksums.txt)
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/snowflake-lab-linux-amd64.tar.gz
+            dist/snowflake-lab-windows-amd64.zip
+            dist/checksums.txt
+          generate_release_notes: true

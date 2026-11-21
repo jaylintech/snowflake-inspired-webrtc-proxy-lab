@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 func newTestHandler() http.Handler {

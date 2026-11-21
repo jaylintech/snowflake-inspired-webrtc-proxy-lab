@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"testing"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/relay"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/relay"
 )
 
 func mustTarget(t *testing.T, raw string) *url.URL {

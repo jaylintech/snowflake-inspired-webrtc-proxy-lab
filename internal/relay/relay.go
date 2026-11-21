@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"snowflake-inspired-webrtc-proxy-lab/internal/lab"
+	"github.com/jaylintech/snowflake-inspired-webrtc-proxy-lab/internal/lab"
 )
 
 const ResponseChunkBytes = 24 * 1024

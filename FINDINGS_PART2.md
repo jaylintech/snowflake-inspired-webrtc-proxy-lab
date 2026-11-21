@@ -1,6 +1,6 @@
 # Part 2 Findings: TLS Inspection, TURN, and Detectability
 
-Status: measurement in progress. No result in this document is a finding until it is backed by the evidence fields below.
+Status: **Complete** (P2-A through P2-F local testbed measurements recorded). Published write-ups: [Part 1](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-1.html), [Part 2 (Testbed & Threat Model)](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-2.html), and [Part 3 (Empirical Findings & Detection Engineering)](https://notes.jaylin.tech/pages/a-snowflake-inspired-webrtc-proxy-poc-for-filter-evasion-part-3.html).
 
 Part 2 extends the same bounded broker/relay/browser-viewer lab used in Part 1. It measures where TLS inspection can observe or alter each connection leg and what STUN, TURN, DTLS, and flow telemetry remain visible to defenders. It does not widen the relay beyond its configured authorized target.
 
@@ -12,7 +12,7 @@ The reproducible local scaffold is documented in [testbed/RUNBOOK.md](testbed/RU
 - mitmproxy `12.2.3` in explicit regular-proxy mode for the ordinary HTTPS inspection baseline.
 - Suricata `8.0.5` and Zeek `8.0.8` for network-disabled offline PCAP analysis.
 
-The service configuration and offline analyzer harness passed local smoke validation. That validation establishes testbed operability only; it is not a P2-A through P2-F measurement and does not change the `Not run` statuses below. In particular, the explicit mitmproxy baseline is not an inline TURN or DTLS inspection path.
+The service configuration and offline analyzer harness passed initial smoke validation prior to executing the full P2-A through P2-F measurement matrix recorded below. Note that the explicit mitmproxy baseline is not an inline transparent TURN or DTLS inspection path.
 
 ## Questions
 
